@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Lava Lamp Physics Playground</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%; overflow:hidden; background:#04050a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas { display:block; width:100%; height:100%; }
+
+  /* ---------- Toggle Button ---------- */
+  #toggle {
+    position: fixed; top: 18px; right: 18px; z-index: 30;
+    width: 44px; height: 44px; border-radius: 14px;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(22,25,38,0.55);
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    color:#dfe6f5; cursor:pointer; user-select:none;
+    transition: all .25s cubic-bezier(.4,0,.2,1);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.45);
+  }
+  #toggle:hover { background: rgba(40,45,68,0.75); transform: translateY(-1px); }
+  #toggle svg { width:20px; height:20px; }
+
+  /* ---------- Panel ---------- */
+  #ui {
+    position: fixed; top: 74px; right: 18px; z-index: 25;
+    width: 290px; max-height: calc(100vh - 100px); overflow-y:auto;
+    padding: 16px 16px 14px;
+    border-radius: 18px;
+    background: rgba(18,21,32,0.62);
+    border: 1px solid rgba(255,255,255,0.10);
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+    box-shadow: 0 14px 50px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+    color:#e6ecfa; font-size:12px;
+    transition: transform .38s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.18) transparent;
+  }
+  #ui::-webkit-scrollbar { width:6px; }
+  #ui::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius:3px; }
+  #ui.hidden {
+    transform: translateX(calc(100% + 40px)) scale(0.96);
+    opacity: 0; pointer-events:none;
+  }
+
+  .title {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: rgba(230,236,250,0.45); font-weight:600;
+    margin-bottom: 14px; display:flex; align-items:center; gap:8px;
+  }
+  .title::after {
+    content:''; flex:1; height:1px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.15), transparent);
+  }
+
+  .row { margin-bottom: 13px; }
+  .row label {
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom: 6px; color: rgba(230,236,250,0.80);
+    font-weight: 500; font-size: 11.5px; letter-spacing: 0.01em;
+  }
+  .row label .val {
+    color: rgba(150,200,255,0.95); font-variant-numeric: tabular-nums;
+    font-size: 11px; font-weight:600;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width:100%; height:4px; border-radius:2px; outline:none;
+    background: rgba(255,255,255,0.13);
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width:14px; height:14px; border-radius:50%;
+    background: linear-gradient(180deg,#ffffff,#b9cdf0);
+    box-shadow: 0 0 10px rgba(140,190,255,0.75), 0 1px 3px rgba(0,0,0,0.5);
+    cursor: pointer; transition: transform .15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.18); }
+  input[type=range]::-moz-range-thumb {
+    width:14px; height:14px; border:none; border-radius:50%;
+    background: linear-gradient(180deg,#ffffff,#b9cdf0);
+    box-shadow: 0 0 10px rgba(140,190,255,0.75);
+    cursor:pointer;
+  }
+
+  .colors { display:flex; gap:10px; margin-bottom:13px; }
+  .colwrap { flex:1; }
+  .colwrap span {
+    display:block; font-size:10.5px; color:rgba(230,236,250,0.6);
+    margin-bottom:5px; letter-spacing:0.02em;
+  }
+  input[type=color] {
+    -webkit-appearance:none; appearance:none; border:none;
+    width:100%; height:32px; border-radius:9px; cursor:pointer;
+    background: transparent; padding:0;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper { padding:0; }
+  input[type=color]::-webkit-color-swatch {
+    border: 1px solid rgba(255,255,255,0.18); border-radius:9px;
+  }
+  input[type=color]::-moz-color-swatch {
+    border: 1px solid rgba(255,255,255,0.18); border-radius:9px;
+  }
+
+  .presets { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .preset {
+    flex:1; min-width: 0; height:22px; border-radius:7px; cursor:pointer;
+    border:1px solid rgba(255,255,255,0.14);
+    transition: transform .15s, border-color .15s;
+  }
+  .preset:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.5); }
+
+  #reset {
+    width:100%; padding:9px; border-radius:10px; cursor:pointer;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.13);
+    color:#e6ecfa; font-size:11.5px; font-weight:600; letter-spacing:0.04em;
+    transition: all .2s; font-family: inherit;
+  }
+  #reset:hover { background: rgba(255,255,255,0.14); transform: translateY(-1px); }
+  #reset:active { transform: translateY(0); }
+
+  .hint {
+    margin-top: 10px; font-size: 10px; line-height: 1.5;
+    color: rgba(230,236,250,0.32); text-align:center;
+  }
+
+  @media (max-width: 560px) {
+    #ui { width: calc(100vw - 36px); }
+  }
+</style>
+</head>
+<body>
+
+<button id="toggle" title="Toggle UI">
+  <svg id="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <line x1="3" y1="6" x2="21" y2="6"></line>
+    <line x1="3" y1="12" x2="21" y2="12"></line>
+    <line x1="3" y1="18" x2="21" y2="18"></line>
+  </svg>
+</button>
+
+<div id="ui">
+  <div class="title">Lava Lamp Playground</div>
+
+  <div class="row">
+    <label>Heat / Temperature <span class="val" id="v-heat">0.55</span></label>
+    <input type="range" id="s-heat" min="0" max="1" step="0.01" value="0.55">
+  </div>
+
+  <div class="row">
+    <label>Density Differential <span class="val" id="v-dens">1.00</span></label>
+    <input type="range" id="s-dens" min="0.3" max="2.6" step="0.01" value="1.00">
+  </div>
+
+  <div class="row">
+    <label>Viscosity <span class="val" id="v-visc">1.00</span></label>
+    <input type="range" id="s-visc" min="0.35" max="3.0" step="0.01" value="1.00">
+  </div>
+
+  <div class="row">
+    <label>Blob Turbulence <span class="val" id="v-turb">0.45</span></label>
+    <input type="range" id="s-turb" min="0" max="1" step="0.01" value="0.45">
+  </div>
+
+  <div class="row">
+    <label>Brightness / Glow <span class="val" id="v-bright">1.00</span></label>
+    <input type="range" id="s-bright" min="0" max="2.2" step="0.01" value="1.00">
+  </div>
+
+  <div class="title" style="margin-top:4px;">Two-Tone Palette</div>
+
+  <div class="colors">
+    <div class="colwrap">
+      <span>Liquid</span>
+      <input type="color" id="c-liquid" value="#1b2a6b">
+    </div>
+    <div class="colwrap">
+      <span>Wax</span>
+      <input type="color" id="c-wax" value="#ff7a2e">
+    </div>
+  </div>
+
+  <div class="presets" id="presets"></div>
+
+  <button id="reset">RESET POOL</button>
+
+  <div class="hint">Drag to look around · Hide UI for full view</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* =========================================================================
+   CONFIG
+   ========================================================================= */
+const CFG = {
+  GLASS_R: 1.0,
+  GLASS_H: 3.2,
+  POOL_R: 0.965,
+  GRAV: 2.0,
+  T_TOP: 0.16,
+  T_REF: 0.5,
+  TOTAL_VOL: 0.86,
+  MAX_BLOBS: 12,
+  SHADER_MAXB: 14,
+};
+
+const POOL_AREA = Math.PI * CFG.POOL_R * CFG.POOL_R;
+
+/* =========================================================================
+   RENDERER
+   ========================================================================= */
+const renderer = new THREE.WebGLRenderer({
+  antialias: false,
+  alpha: false,
+  powerPreference: 'high-performance'
+});
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+renderer.setPixelRatio(1);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.domElement.style.width = '100%';
+renderer.domElement.style.height = '100%';
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 1.75, 7.0);
+camera.lookAt(0, 1.45, 0);
+
+/* =========================================================================
+   PHYSICS STATE
+   ========================================================================= */
+const params = {
+  heat: 0.55,
+  densityDiff: 1.0,
+  viscosity: 1.0,
+  turbulence: 0.45,
+  brightness: 1.0,
+  liquidColor: new THREE.Color('#1b2a6b'),
+  waxColor: new THREE.Color('#ff7a2e'),
+};
+
+const pool = {
+  volume: CFG.TOTAL_VOL,
+  level: CFG.TOTAL_VOL / POOL_AREA,
+  temp: 0.5,
+};
+
+const blobs = [];
+let spawnTimer = 0.8;
+let simTime = 0;
+
+const _tmpV = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+
+function spawnBlob() {
+  const vol = 0.026 + Math.random() * 0.026;
+  if (pool.volume < vol * 1.25) return;
+
+  const r = Math.cbrt((3 * vol) / (4 * Math.PI));
+  pool.volume -= vol;
+
+  const ang = Math.random() * Math.PI * 2;
+  const rad = Math.random() * Math.max(0, CFG.POOL_R - r - 0.10);
+
+  const b = {
+    p: new THREE.Vector3(Math.cos(ang) * rad, pool.level + r * 0.30, Math.sin(ang) * rad),
+    v: new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.04, (Math.random() - 0.5) * 0.05),
+    r,
+    vol,
+    r0: r,
+    temp: pool.temp,
+    seed: Math.random() * 80,
+    axis: new THREE.Vector3(0, 1, 0),
+    stretch: 1.0,
+    age: 0,
+    absorbing: false,
+    absorbT: 0,
+  };
+  blobs.push(b);
+}
+
+function resetPool() {
+  for (const b of blobs) pool.volume += b.vol;
+  blobs.length = 0;
+  pool.level = pool.volume / POOL_AREA;
+}
+
+/* =========================================================================
+   PHYSICS STEP
+   ========================================================================= */
+function physics(dt) {
+  const eta = params.viscosity;
+  const alpha = params.densityDiff;
+  const turb = params.turbulence;
+
+  const T_bot = CFG.T_TOP + params.heat * 0.95;
+  const T_top = CFG.T_TOP;
+
+  // --- Pool thermodynamics ------------------------------------------------
+  const targetPoolT = T_bot + 0.16;
+  pool.temp += (targetPoolT - pool.temp) * Math.min(1, dt * 0.70);
+  pool.level = Math.max(0.001, pool.volume / POOL_AREA);
+
+  // --- Spawning -----------------------------------------------------------
+  spawnTimer -= dt;
+  if (spawnTimer <= 0 && blobs.length < CFG.MAX_BLOBS &&
+      pool.temp > 0.595 && pool.level > 0.085) {
+    spawnBlob();
+    spawnTimer = 0.55 + Math.random() * 1.5;
+  }
+
+  // --- Per-blob dynamics --------------------------------------------------
+  for (let i = 0; i < blobs.length; i++) {
+    const b = blobs[i];
+    b.age += dt;
+
+    // Thermal environment (hot at base, cool at top)
+    const hN = Math.max(0, 1 - b.p.y / CFG.GLASS_H);
+    const Tliq = T_top + (T_bot - T_top) * Math.pow(hN, 1.15);
+
+    // Conductive heat exchange (viscosity dampens it)
+    const kHeat = 0.72 / (0.55 + eta * 0.65);
+    b.temp += (Tliq - b.temp) * Math.min(1, dt * kHeat);
+
+    // Boussinesq buoyancy:  F = (rho_liq - rho_wax(T)) * V * g
+    const buoyAccel = alpha * (b.temp - CFG.T_REF) * CFG.GRAV;
+    b.v.y += buoyAccel * dt;
+
+    // Convection eddies / turbulence
+    if (turb > 0.001) {
+      const s = b.seed;
+      b.v.x += Math.sin(b.p.y * 2.35 + simTime * 0.85 + s) * turb * 0.60 * dt;
+      b.v.z += Math.cos(b.p.y * 1.90 - simTime * 0.75 + s * 1.7) * turb * 0.60 * dt;
+      // slow azimuthal swirl
+      b.v.x += -b.p.z * turb * 0.28 * dt;
+      b.v.z += b.p.x * turb * 0.28 * dt;
+    }
+
+    // Stokes viscous drag (F = -6*pi*eta*r*v  ->  a = -k*v/r^2)
+    const kDrag = 0.045 * eta / (b.r * b.r);
+    const damp = Math.max(0, 1 - kDrag * dt);
+    b.v.multiplyScalar(damp);
+
+    // Integrate
+    b.p.addScaledVector(b.v, dt);
+
+    // --- Containment (glass walls) ---
+    const rmax = CFG.GLASS_R - b.r * 0.80;
+    const rad = Math.hypot(b.p.x, b.p.z);
+    if (rad > rmax && rad > 1e-5) {
+      const nx = b.p.x / rad, nz = b.p.z / rad;
+      b.p.x = nx * rmax;
+      b.p.z = nz * rmax;
+      const vn = b.v.x * nx + b.v.z * nz;
+      if (vn > 0) { b.v.x -= vn * nx * 1.5; b.v.z -= vn * nz * 1.5; }
+    }
+
+    // --- Top / bottom ---
+    const topLim = CFG.GLASS_H - b.r * 0.85;
+    if (b.p.y > topLim) {
+      b.p.y = topLim;
+      if (b.v.y > 0) b.v.y *= -0.20;
+    }
+    if (b.p.y < b.r * 0.40 && !b.absorbing) b.p.y = b.r * 0.40;
+  }
+
+  // --- Blob ↔ Blob interaction -------------------------------------------
+  for (let i = 0; i < blobs.length; i++) {
+    const a = blobs[i];
+    for (let j = i + 1; j < blobs.length; j++) {
+      const b = blobs[j];
+      const dx = b.p.x - a.p.x, dy = b.p.y - a.p.y, dz = b.p.z - a.p.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      const rsum = a.r + b.r;
+      const reach = rsum * 1.55;
+      if (d2 > reach * reach) continue;
+
+      const d = Math.sqrt(d2) + 1e-6;
+
+      // Conductive heat exchange between parcels
+      const prox = Math.max(0, 1 - d / reach);
+      const ex = (a.temp - b.temp) * prox * dt * 1.8 / (0.5 + eta);
+      a.temp -= ex; b.temp += ex;
+
+      // Soft-body repulsion (allows partial overlap so metaballs merge)
+      const minD = rsum * 0.82;
+      if (d < minD) {
+        const inv = 1 / d;
+        const nx = dx * inv, ny = dy * inv, nz = dz * inv;
+        const overlap = minD - d;
+        const push = overlap * 22.0 * dt;
+        a.v.x -= nx * push; a.v.y -= ny * push; a.v.z -= nz * push;
+        b.v.x += nx * push; b.v.y += ny * push; b.v.z += nz * push;
+
+        // Normal-velocity damping
+        const relV = (b.v.x - a.v.x) * nx + (b.v.y - a.v.y) * ny + (b.v.z - a.v.z) * nz;
+        if (relV < 0) {
+          const imp = -relV * 0.45;
+          a.v.x -= nx * imp; a.v.y -= ny * imp; a.v.z -= nz * imp;
+          b.v.x += nx * imp; b.v.y += ny * imp; b.v.z += nz * imp;
+        }
+      }
+    }
+  }
+
+  // --- Coalescence with the basal pool ------------------------------------
+  for (let i = blobs.length - 1; i >= 0; i--) {
+    const b = blobs[i];
+
+    if (!b.absorbing && b.age > 1.6 && b.v.y < 0.06 && b.temp < 0.70 &&
+        (b.p.y - b.r * 0.85) < pool.level + 0.03) {
+      b.absorbing = true;
+      b.absorbT = 0;
+    }
+
+    if (b.absorbing) {
+      b.absorbT += dt;
+      const f = Math.min(1, b.absorbT / 0.50);
+      const dvol = b.vol * (dt / 0.50);
+      const give = Math.min(dvol, b.vol);
+      pool.volume += give;
+      b.vol -= give;
+      b.r = Math.max(0.0005, Math.cbrt((3 * b.vol) / (4 * Math.PI)));
+      // sink gently into the pool
+      b.p.y -= dt * 0.12;
+      // volume-weighted heat transfer
+      if (pool.volume > 0) {
+        pool.temp = pool.temp * 0.995 + b.temp * 0.005;
+      }
+      if (f >= 1 || b.vol <= 1e-5) {
+        blobs.splice(i, 1);
+      }
+    }
+  }
+
+  // --- Squash & stretch ---------------------------------------------------
+  for (const b of blobs) {
+    const spd = b.v.length();
+    const targetStretch = 1 + Math.min(spd * 1.15, 0.62);
+    b.stretch += (targetStretch - b.stretch) * Math.min(1, dt * 7.0);
+    if (spd > 0.025) {
+      _tmpV.copy(b.v).multiplyScalar(1 / spd);
+      b.axis.lerp(_tmpV, Math.min(1, dt * 5.5)).normalize();
+    } else {
+      b.axis.lerp(UP, Math.min(1, dt * 2.0)).normalize();
+    }
+  }
+
+  pool.level = Math.max(0.001, pool.volume / POOL_AREA);
+}
+
+/* =========================================================================
+   SHADERS
+   ========================================================================= */
+const quadVert = /* glsl */`
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+
+const lavaFrag = /* glsl */`
+precision highp float;
+
+#define MAXB ${CFG.SHADER_MAXB}
+
+varying vec2 vUv;
+
+uniform float uTime;
+uniform vec3  uCamPos;
+uniform vec3  uCamRight;
+uniform vec3  uCamUp;
+uniform vec3  uCamFwd;
+uniform float uTanFov;
+uniform float uAspect;
+
+uniform int   uBlobCount;
+uniform vec4  uBlobA[MAXB];   // xyz position, w radius
+uniform vec4  uBlobB[MAXB];   // xyz stretch axis, w stretch factor
+uniform vec4  uBlobC[MAXB];   // x temperature, y seed
+
+uniform float uPoolLevel;
+uniform float uPoolRadius;
+uniform float uPoolTemp;
+uniform float uTurb;
+uniform float uBright;
+
+uniform vec3  uLiquidColor;
+uniform vec3  uWaxColor;
+
+uniform float uGlassR;
+uniform float uGlassH;
+
+const float BASE_R  = 1.16;
+const float BASE_Y0 = -0.58;
+const float BASE_Y1 =  0.00;
+const float CAP_R   = 0.78;
+const float CAP_H   =  0.24;
+
+/* ---------------- noise ---------------- */
+float hash13(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float vnoise(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = mix(hash13(i + vec3(0,0,0)), hash13(i + vec3(1,0,0)), f.x);
+  float b = mix(hash13(i + vec3(0,1,0)), hash13(i + vec3(1,1,0)), f.x);
+  float c = mix(hash13(i + vec3(0,0,1)), hash13(i + vec3(1,0,1)), f.x);
+  float d = mix(hash13(i + vec3(0,1,1)), hash13(i + vec3(1,1,1)), f.x);
+  return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
+}
+
+vec3 warp3(vec3 p, float t) {
+  vec3 q = p * 2.45 + vec3(0.0, t * 0.30, 0.0);
+  float n1 = vnoise(q);
+  float n2 = vnoise(q + vec3(31.4, 17.8, 9.2));
+  float n3 = vnoise(q + vec3(-13.7, 27.1, 41.3));
+  return vec3(n1, n2, n3) * 2.0 - 1.0;
+}
+
+/* ---------------- sdf helpers ---------------- */
+float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+float sdWax(vec3 p) {
+  // Flat-topped basal pool: infinite cylinder clipped by a horizontal plane
+  float d = max(length(p.xz) - uPoolRadius, p.y - uPoolLevel);
+
+  for (int i = 0; i < MAXB; i++) {
+    if (i >= uBlobCount) break;
+    vec4 a = uBlobA[i];
+    vec4 b = uBlobB[i];
+
+    vec3 q = p - a.xyz;
+    float proj = dot(q, b.xyz);
+    q -= b.xyz * proj * (1.0 - 1.0 / b.w);   // velocity squash/stretch
+
+    float bd = length(q) - a.w;
+    d = smin(d, bd, 0.135);
+  }
+  return d;
+}
+
+float map(vec3 p) {
+  float d = sdWax(p);
+  if (uTurb > 0.01 && d < 0.32) {
+    float w = smoothstep(0.32, 0.045, d) * uTurb;
+    vec3 q = p + warp3(p, uTime) * (0.095 * w);
+    float d2 = sdWax(q);
+    d = mix(d, d2 * 0.80, w);
+  }
+  return d;
+}
+
+vec3 calcNormal(vec3 p) {
+  vec2 e = vec2(1.0, -1.0) * 0.0016;
+  return normalize(
+    e.xyy * map(p + e.xyy) +
+    e.yyx * map(p + e.yyx) +
+    e.yxy * map(p + e.yxy) +
+    e.xxx * map(p + e.xxx)
+  );
+}
+
+/* ---------------- cylinder intersection ---------------- */
+bool cylHit(vec3 ro, vec3 rd, float r, float y0, float y1, out float t0, out float t1) {
+  t0 = -1e9; t1 = 1e9;
+
+  float a = dot(rd.xz, rd.xz);
+  float b = dot(ro.xz, rd.xz);
+  float c = dot(ro.xz, ro.xz) - r * r;
+
+  if (a > 1e-8) {
+    float disc = b * b - a * c;
+    if (disc < 0.0) return false;
+    float sq = sqrt(disc);
+    t0 = max(t0, (-b - sq) / a);
+    t1 = min(t1, (-b + sq) / a);
+  } else {
+    if (c > 0.0) return false;
+  }
+
+  if (abs(rd.y) > 1e-8) {
+    float ta = (y0 - ro.y) / rd.y;
+    float tb = (y1 - ro.y) / rd.y;
+    t0 = max(t0, min(ta, tb));
+    t1 = min(t1, max(ta, tb));
+  } else {
+    if (ro.y < y0 || ro.y > y1) return false;
+  }
+
+  return t1 > t0;
+}
+
+vec3 cylNormal(vec3 p, float r, float y0, float y1) {
+  if (p.y < y0 + 0.002) return vec3(0.0, -1.0, 0.0);
+  if (p.y > y1 - 0.002) return vec3(0.0,  1.0, 0.0);
+  vec2 h = p.xz;
+  float l = length(h) + 1e-6;
+  return vec3(h.x / l, 0.0, h.y / l);
+}
+
+/* ---------------- temperature lookup ---------------- */
+float waxTempAt(vec3 p) {
+  float best = 1e9;
+  float temp = uPoolTemp;
+  for (int i = 0; i < MAXB; i++) {
+    if (i >= uBlobCount) break;
+    float d = length(p - uBlobA[i].xyz) - uBlobA[i].w;
+    if (d < best) { best = d; temp = uBlobC[i].x; }
+  }
+  float w = smoothstep(0.12, -0.04, best);
+  return mix(uPoolTemp, temp, w);
+}
+
+/* ---------------- shading ---------------- */
+vec3 shadeWax(vec3 p, vec3 rd) {
+  vec3 n = calcNormal(p);
+  vec3 v = -rd;
+
+  float temp = waxTempAt(p);
+  float hot = smoothstep(0.30, 1.02, temp);
+
+  vec3 bulbPos = vec3(0.0, -0.32, 0.0);
+  vec3 Lb = normalize(bulbPos - p);
+  vec3 Lt = normalize(vec3(0.35, 1.0, 0.65));
+
+  float dTop  = clamp(dot(n, Lt) * 0.5 + 0.5, 0.0, 1.0);
+  float dBulb = clamp(dot(n, Lb) * 0.55 + 0.45, 0.0, 1.0);
+  float fres  = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 3.0);
+  float sss   = pow(clamp(dot(v, -normalize(Lb + n * 0.7)), 0.0, 1.0), 1.5);
+
+  vec3 base = uWaxColor;
+
+  vec3 col  = base * 0.10;
+  col += base * dTop * 0.30;
+  col += base * dBulb * 1.9 * uBright;
+  col += base * sss * 1.15 * uBright;
+  col += vec3(1.0, 0.52, 0.20) * hot * 1.05 * uBright;
+  col += vec3(1.0) * fres * 0.42;
+  col += base * pow(fres, 1.5) * 0.55;
+
+  vec3 hv = normalize(Lt + v);
+  col += vec3(1.0) * pow(clamp(dot(n, hv), 0.0, 1.0), 64.0) * 0.55;
+
+  // warm internal core near the bulb
+  float core = pow(clamp(1.0 - p.y / uGlassH, 0.0, 1.0), 3.0);
+  col += base * core * 1.2 * uBright;
+
+  return col;
+}
+
+vec3 shadeMetal(vec3 p, vec3 n, vec3 rd) {
+  vec3 L = normalize(vec3(0.4, 1.0, 0.6));
+  vec3 h = normalize(L - rd);
+  float diff = clamp(dot(n, L) * 0.5 + 0.5, 0.0, 1.0);
+  float spec = pow(clamp(dot(n, h), 0.0, 1.0), 40.0);
+  float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 4.0);
+
+  vec3 base = vec3(0.052, 0.056, 0.068);
+  vec3 col = base * (0.30 + diff * 0.85);
+  col += vec3(1.0) * spec * 0.35;
+  col += uLiquidColor * fres * 0.20;
+  return col;
+}
+
+vec3 shadeLiquid(vec3 ro, vec3 rd, float tg0, float tg1, bool hit) {
+  vec3 bg = mix(uLiquidColor * 0.030, vec3(0.004, 0.005, 0.010), 0.65);
+  if (!hit) return bg;
+
+  float t0 = max(tg0, 0.0);
+  vec3 mid = ro + rd * (t0 + tg1) * 0.5;
+  float hN = clamp(mid.y / uGlassH, 0.0, 1.0);
+  float bulb = pow(1.0 - hN, 2.0);
+
+  vec3 liq = uLiquidColor * (0.075 + bulb * 1.55 * uBright);
+  liq += vec3(1.0, 0.55, 0.22) * bulb * 0.26 * uBright;
+
+  float depth = tg1 - t0;
+  float fog = 1.0 - exp(-depth * 0.55);
+  return mix(liq, bg, fog * 0.72);
+}
+
+/* ---------------- main ---------------- */
+void main() {
+  vec2 uv = vUv * 2.0 - 1.0;
+  vec3 rd = normalize(
+    uCamFwd +
+    uCamRight * (uv.x * uAspect * uTanFov) +
+    uCamUp    * (uv.y * uTanFov)
+  );
+  vec3 ro = uCamPos;
+
+  // --- opaque metal hardware ---
+  float tOpaque = 1e9;
+  int opaqueId = -1;
+  float a0, a1;
+  if (cylHit(ro, rd, BASE_R, BASE_Y0, BASE_Y1, a0, a1) && a0 > 0.0 && a0 < tOpaque) {
+    tOpaque = a0; opaqueId = 0;
+  }
+  if (cylHit(ro, rd, CAP_R, uGlassH, uGlassH + CAP_H, a0, a1) && a0 > 0.0 && a0 < tOpaque) {
+    tOpaque = a0; opaqueId = 1;
+  }
+
+  // --- glass envelope ---
+  float tg0, tg1;
+  bool glassOK = cylHit(ro, rd, uGlassR, 0.0, uGlassH, tg0, tg1) && tg1 > 0.0;
+
+  // --- raymarch the wax ---
+  float tWax = -1.0;
+  if (glassOK) {
+    float t = max(tg0, 0.0);
+    float tEnd = min(tg1, tOpaque);
+    for (int i = 0; i < 96; i++) {
+      float d = map(ro + rd * t);
+      if (d < 0.0018) { tWax = t; break; }
+      t += d;
+      if (t > tEnd) break;
+    }
+    if (tWax > tOpaque || tWax > tg1) tWax = -1.0;
+  }
+
+  vec3 col;
+
+  if (tWax > 0.0) {
+    col = shadeWax(ro + rd * tWax, rd);
+    float dpath = tWax - max(tg0, 0.0);
+    float fog = 1.0 - exp(-dpath * 0.28);
+    col = mix(col, uLiquidColor * 0.40, fog * 0.42);
+  } else if (opaqueId >= 0) {
+    vec3 p = ro + rd * tOpaque;
+    vec3 n = (opaqueId == 0)
+      ? cylNormal(p, BASE_R, BASE_Y0, BASE_Y1)
+      : cylNormal(p, CAP_R, uGlassH, uGlassH + CAP_H);
+    col = shadeMetal(p, n, rd);
+  } else {
+    col = shadeLiquid(ro, rd, tg0, tg1, glassOK);
+  }
+
+  // --- glass fresnel rim (entry + exit) ---
+  if (glassOK) {
+    vec3 pE = ro + rd * max(tg0, 0.0);
+    vec3 nE = cylNormal(pE, uGlassR, 0.0, uGlassH);
+    float fE = pow(1.0 - abs(dot(nE, rd)), 4.0);
+
+    vec3 pX = ro + rd * tg1;
+    vec3 nX = cylNormal(pX, uGlassR, 0.0, uGlassH);
+    float fX = pow(1.0 - abs(dot(nX, rd)), 4.0);
+
+    float g = clamp(fE + fX, 0.0, 1.0);
+    col += vec3(0.62, 0.78, 1.0) * g * 0.22 * (0.35 + uBright * 0.65);
+  }
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+/* ---------------- post shaders ---------------- */
+const brightFrag = /* glsl */`
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D tDiffuse;
+uniform float uThreshold;
+void main() {
+  vec3 c = texture2D(tDiffuse, vUv).rgb;
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  float k = max(0.0, l - uThreshold) / max(l, 1e-4);
+  gl_FragColor = vec4(c * k, 1.0);
+}
+`;
+
+const blurFrag = /* glsl */`
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D tDiffuse;
+uniform vec2 uDir;
+void main() {
+  vec3 s = texture2D(tDiffuse, vUv).rgb * 0.227027;
+  s += (texture2D(tDiffuse, vUv + uDir * 1.3846).rgb +
+        texture2D(tDiffuse, vUv - uDir * 1.3846).rgb) * 0.3162162;
+  s += (texture2D(tDiffuse, vUv + uDir * 3.2308).rgb +
+        texture2D(tDiffuse, vUv - uDir * 3.2308).rgb) * 0.0702702;
+  gl_FragColor = vec4(s, 1.0);
+}
+`;
+
+const compositeFrag = /* glsl */`
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D tScene;
+uniform sampler2D tBloom;
+uniform float uBloomStrength;
+uniform float uExposure;
+
+vec3 aces(vec3 x) {
+  float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+void main() {
+  vec3 c = texture2D(tScene, vUv).rgb;
+  vec3 bl = texture2D(tBloom, vUv).rgb;
+  c += bl * uBloomStrength;
+  c *= uExposure;
+  c = aces(c);
+
+  // gentle saturation lift
+  float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = mix(vec3(lum), c, 1.14);
+  c = clamp(c, 0.0, 1.0);
+
+  // vignette
+  vec2 q = vUv - 0.5;
+  c *= 1.0 - dot(q, q) * 0.42;
+
+  gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
+}
+`;
+
+/* =========================================================================
+   MATERIALS & RENDER TARGETS
+   ========================================================================= */
+const blobA = [], blobB = [], blobC = [];
+for (let i = 0; i < CFG.SHADER_MAXB; i++) {
+  blobA.push(new THREE.Vector4(0, -100, 0, 0.001));
+  blobB.push(new THREE.Vector4(0, 1, 0, 1));
+  blobC.push(new THREE.Vector4(0, 0, 0, 0));
+}
+
+const lavaUniforms = {
+  uTime:       { value: 0 },
+  uCamPos:     { value: new THREE.Vector3() },
+  uCamRight:   { value: new THREE.Vector3(1, 0, 0) },
+  uCamUp:      { value: new THREE.Vector3(0, 1, 0) },
+  uCamFwd:     { value: new THREE.Vector3(0, 0, -1) },
+  uTanFov:     { value: Math.tan(THREE.MathUtils.degToRad(35) * 0.5) },
+  uAspect:     { value: 1 },
+
+  uBlobCount:  { value: 0 },
+  uBlobA:      { value: blobA },
+  uBlobB:      { value: blobB },
+  uBlobC:      { value: blobC },
+
+  uPoolLevel:  { value: 0.2 },
+  uPoolRadius: { value: CFG.POOL_R },
+  uPoolTemp:   { value: 0.5 },
+  uTurb:       { value: 0.45 },
+  uBright:     { value: 1.0 },
+
+  uLiquidColor: { value: new THREE.Color('#1b2a6b') },
+  uWaxColor:    { value: new THREE.Color('#ff7a2e') },
+
+  uGlassR: { value: CFG.GLASS_R },
+  uGlassH: { value: CFG.GLASS_H },
+};
+
+const lavaMat = new THREE.ShaderMaterial({
+  uniforms: lavaUniforms,
+  vertexShader: quadVert,
+  fragmentShader: lavaFrag,
+  depthTest: false,
+  depthWrite: false,
+});
+
+const brightMat = new THREE.ShaderMaterial({
+  uniforms: { tDiffuse: { value: null }, uThreshold: { value: 0.62 } },
+  vertexShader: quadVert,
+  fragmentShader: brightFrag,
+  depthTest: false, depthWrite: false,
+});
+
+const blurMat = new THREE.ShaderMaterial({
+  uniforms: { tDiffuse: { value: null }, uDir: { value: new THREE.Vector2() } },
+  vertexShader: quadVert,
+  fragmentShader: blurFrag,
+  depthTest: false, depthWrite: false,
+});
+
+const compositeMat = new THREE.ShaderMaterial({
+  uniforms: {
+    tScene: { value: null },
+    tBloom: { value: null },
+    uBloomStrength: { value: 0.85 },
+    uExposure: { value: 1.05 },
+  },
+  vertexShader: quadVert,
+  fragmentShader: compositeFrag,
+  depthTest: false, depthWrite: false,
+});
+
+const passScene = new THREE.Scene();
+const passCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const passMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), lavaMat);
+passMesh.frustumCulled = false;
+passScene.add(passMesh);
+
+let rtScene = null, rtBloomA = null, rtBloomB = null;
+let renderScale = 1.0;
+
+function makeTarget(w, h) {
+  return new THREE.WebGLRenderTarget(w, h, {
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    depthBuffer: false,
+    stencilBuffer: false,
+    colorSpace: THREE.NoColorSpace,
+  });
+}
+
+function resize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  renderer.setPixelRatio(1);
+  renderer.setSize(w, h, true);
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let scale = renderScale * Math.min(dpr, 1.75);
+
+  // Cap the raymarch workload so we stay at 60fps on big displays
+  const MAX_PIXELS = 2100000;
+  if (w * h * scale * scale > MAX_PIXELS) {
+    scale = Math.sqrt(MAX_PIXELS / (w * h));
+  }
+
+  const W = Math.max(2, Math.floor(w * scale));
+  const Hh = Math.max(2, Math.floor(h * scale));
+
+  if (rtScene) rtScene.dispose();
+  if (rtBloomA) rtBloomA.dispose();
+  if (rtBloomB) rtBloomB.dispose();
+
+  rtScene = makeTarget(W, Hh);
+  const bw = Math.max(2, Math.floor(W / 4));
+  const bh = Math.max(2, Math.floor(Hh / 4));
+  rtBloomA = makeTarget(bw, bh);
+  rtBloomB = makeTarget(bw, bh);
+
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  lavaUniforms.uAspect.value = W / Hh;
+  blurMat.uniforms.uDir.value.set(1 / bw, 0);
+}
+
+window.addEventListener('resize', resize);
+
+/* =========================================================================
+   UI
+   ========================================================================= */
+const ui = document.getElementById('ui');
+const toggleBtn = document.getElementById('toggle');
+const icon = document.getElementById('icon');
+
+let uiVisible = true;
+toggleBtn.addEventListener('click', () => {
+  uiVisible = !uiVisible;
+  ui.classList.toggle('hidden', !uiVisible);
+  icon.innerHTML = uiVisible
+    ? '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>'
+    : '<line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/>';
+});
+
+function bindSlider(id, valId, key, fmt) {
+  const el = document.getElementById(id);
+  const out = document.getElementById(valId);
+  const upd = () => {
+    params[key] = parseFloat(el.value);
+    out.textContent = fmt ? fmt(params[key]) : params[key].toFixed(2);
+  };
+  el.addEventListener('input', upd);
+  upd();
+}
+bindSlider('s-heat',   'v-heat',   'heat');
+bindSlider('s-dens',   'v-dens',   'densityDiff');
+bindSlider('s-visc',   'v-visc',   'viscosity');
+bindSlider('s-turb',   'v-turb',   'turbulence');
+bindSlider('s-bright', 'v-bright', 'brightness');
+
+const liquidInput = document.getElementById('c-liquid');
+const waxInput = document.getElementById('c-wax');
+
+liquidInput.addEventListener('input', () => {
+  params.liquidColor.set(liquidInput.value);
+});
+waxInput.addEventListener('input', () => {
+  params.waxColor.set(waxInput.value);
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  resetPool();
+  spawnTimer = 1.0;
+});
+
+/* ---------- presets ---------- */
+const PRESETS = [
+  { liquid: '#1b2a6b', wax: '#ff7a2e' }, // classic sunset
+  { liquid: '#0d2f4d', wax: '#00e5b0' }, // bioluminescent
+  { liquid: '#3a0d3f', wax: '#ff2f8e' }, // neon magenta
+  { liquid: '#142a12', wax: '#b6ff3c' }, // toxic lime
+  { liquid: '#2a0a0a', wax: '#ff3b2f' }, // lava
+  { liquid: '#101018', wax: '#c8b6ff' }, // moonlight
+];
+
+const presetsEl = document.getElementById('presets');
+PRESETS.forEach((p) => {
+  const d = document.createElement('div');
+  d.className = 'preset';
+  d.style.background = `linear-gradient(135deg, ${p.liquid} 0%, ${p.liquid} 45%, ${p.wax} 55%, ${p.wax} 100%)`;
+  d.addEventListener('click', () => {
+    liquidInput.value = p.liquid;
+    waxInput.value = p.wax;
+    params.liquidColor.set(p.liquid);
+    params.waxColor.set(p.wax);
+  });
+  presetsEl.appendChild(d);
+});
+
+/* =========================================================================
+   CAMERA INTERACTION
+   ========================================================================= */
+let mouseX = 0, mouseY = 0;
+let targetMX = 0, targetMY = 0;
+
+window.addEventListener('pointermove', (e) => {
+  targetMX = (e.clientX / window.innerWidth) * 2 - 1;
+  targetMY = (e.clientY / window.innerHeight) * 2 - 1;
+});
+
+/* =========================================================================
+   MAIN LOOP
+   ========================================================================= */
+let lastT = performance.now();
+let frameSamples = [];
+let qualityTimer = 0;
+
+function updateCamera(t) {
+  mouseX += (targetMX - mouseX) * 0.05;
+  mouseY += (targetMY - mouseY) * 0.05;
+
+  const orbit = Math.sin(t * 0.07) * 0.55 + mouseX * 0.65;
+  const height = 1.78 - mouseY * 0.30;
+
+  camera.position.set(orbit, height, 7.0);
+  camera.lookAt(0, 1.48, 0);
+  camera.updateMatrixWorld();
+
+  const e = camera.matrixWorld.elements;
+  lavaUniforms.uCamPos.value.copy(camera.position);
+  lavaUniforms.uCamRight.value.set(e[0], e[1], e[2]).normalize();
+  lavaUniforms.uCamUp.value.set(e[4], e[5], e[6]).normalize();
+  lavaUniforms.uCamFwd.value.set(-e[8], -e[9], -e[10]).normalize();
+}
+
+function pushBlobUniforms() {
+  const n = Math.min(blobs.length, CFG.SHADER_MAXB);
+  for (let i = 0; i < CFG.SHADER_MAXB; i++) {
+    if (i < n) {
+      const b = blobs[i];
+      blobA[i].set(b.p.x, b.p.y, b.p.z, b.r);
+      blobB[i].set(b.axis.x, b.axis.y, b.axis.z, Math.max(1.0, b.stretch));
+      blobC[i].set(b.temp, b.seed, 0, 0);
+    } else {
+      blobA[i].set(0, -100, 0, 0.0008);
+      blobB[i].set(0, 1, 0, 1);
+      blobC[i].set(0, 0, 0, 0);
+    }
+  }
+  lavaUniforms.uBlobCount.value = n;
+}
+
+function runPass(material, target) {
+  passMesh.material = material;
+  renderer.setRenderTarget(target);
+  renderer.render(passScene, passCam);
+}
+
+function animate(now) {
+  requestAnimationFrame(animate);
+
+  let dt = (now - lastT) / 1000;
+  lastT = now;
+  if (!isFinite(dt) || dt < 0) dt = 0.016;
+  dt = Math.min(dt, 1 / 30); // clamp for stability after tab switches
+
+  simTime += dt;
+
+  // --- physics with substeps for stability ---
+  const sub = dt > 1 / 50 ? 2 : 1;
+  for (let s = 0; s < sub; s++) physics(dt / sub);
+
+  // --- uniforms ---
+  updateCamera(simTime);
+
+  lavaUniforms.uTime.value = simTime;
+  lavaUniforms.uPoolLevel.value = Math.max(0.001, pool.level);
+  lavaUniforms.uPoolTemp.value = pool.temp;
+  lavaUniforms.uTurb.value = params.turbulence;
+  lavaUniforms.uBright.value = params.brightness;
+  lavaUniforms.uLiquidColor.value.copy(params.liquidColor);
+  lavaUniforms.uWaxColor.value.copy(params.waxColor);
+
+  pushBlobUniforms();
+
+  // --- render passes ---
+  runPass(lavaMat, rtScene);
+
+  brightMat.uniforms.tDiffuse.value = rtScene.texture;
+  brightMat.uniforms.uThreshold.value = 0.55 / Math.max(0.35, params.brightness);
+  runPass(brightMat, rtBloomA);
+
+  blurMat.uniforms.tDiffuse.value = rtBloomA.texture;
+  blurMat.uniforms.uDir.value.set(1 / rtBloomA.width, 0);
+  runPass(blurMat, rtBloomB);
+
+  blurMat.uniforms.tDiffuse.value = rtBloomB.texture;
+  blurMat.uniforms.uDir.value.set(0, 1 / rtBloomA.height);
+  runPass(blurMat, rtBloomA);
+
+  compositeMat.uniforms.tScene.value = rtScene.texture;
+  compositeMat.uniforms.tBloom.value = rtBloomA.texture;
+  compositeMat.uniforms.uBloomStrength.value = 0.55 + params.brightness * 0.65;
+  compositeMat.uniforms.uExposure.value = 0.85 + params.brightness * 0.28;
+
+  runPass(compositeMat, null);
+
+  // --- adaptive quality ---
+  frameSamples.push(dt);
+  if (frameSamples.length > 45) {
+    frameSamples.shift();
+    qualityTimer += 1;
+    if (qualityTimer > 45) {
+      qualityTimer = 0;
+      let avg = 0;
+      for (const f of frameSamples) avg += f;
+      avg /= frameSamples.length;
+
+      if (avg > 0.0205 && renderScale > 0.55) {
+        renderScale = Math.max(0.55, renderScale - 0.07);
+        frameSamples.length = 0;
+        resize();
+      } else if (avg < 0.0138 && renderScale < 1.0) {
+        renderScale = Math.min(1.0, renderScale + 0.06);
+        frameSamples.length = 0;
+        resize();
+      }
+    }
+  }
+}
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+// Seed a few blobs so the lamp looks alive immediately
+pool.temp = 0.62;
+for (let i = 0; i < 3; i++) {
+  pool.temp = 0.78;
+  spawnBlob();
+  const b = blobs[blobs.length - 1];
+  if (b) {
+    b.p.y = 0.6 + i * 0.85 + Math.random() * 0.4;
+    b.temp = 0.55 + Math.random() * 0.25;
+    b.age = 3.0;
+  }
+}
+pool.temp = 0.62;
+
+resize();
+requestAnimationFrame((t) => { lastT = t; animate(t); });
+</script>
+</body>
+</html>

@@ -1,0 +1,1929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>3D Lava Lamp Physics Playground — Full Thermal Lifecycle & Smooth Droplet Simulator</title>
+  <style>
+    :root {
+      --bg-glass: rgba(14, 16, 26, 0.78);
+      --bg-glass-hover: rgba(24, 28, 44, 0.90);
+      --border-glass: rgba(255, 255, 255, 0.14);
+      --border-highlight: rgba(255, 255, 255, 0.28);
+      --text-primary: #f4f6fb;
+      --text-secondary: rgba(220, 226, 245, 0.70);
+      --accent: #ff6b4a;
+      --radius-lg: 16px;
+      --radius-md: 10px;
+      --radius-sm: 7px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05060b;
+      font-family: var(--font-sans);
+      color: var(--text-primary);
+    }
+
+    #glCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #glCanvas:active {
+      cursor: grabbing;
+    }
+
+    /* Top Header & Quick Status Bar */
+    .top-bar {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .brand-pill {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .brand-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff3b1f, #260947);
+      box-shadow: 0 0 12px #ff3b1f;
+    }
+
+    .brand-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-stats {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding-left: 10px;
+      border-left: 1px solid var(--border-glass);
+      display: flex;
+      gap: 10px;
+    }
+
+    .top-actions {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 14px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glass);
+      border-radius: 999px;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .icon-btn:hover {
+      background: var(--bg-glass-hover);
+      border-color: var(--border-highlight);
+      transform: translateY(-1px);
+    }
+
+    .icon-btn:active {
+      transform: translateY(0);
+    }
+
+    .kbd-hint {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-secondary);
+    }
+
+    /* Main Control Dock / Toolbar */
+    .control-dock {
+      position: fixed;
+      top: 68px;
+      right: 16px;
+      width: 344px;
+      max-height: calc(100vh - 84px);
+      overflow-y: auto;
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      z-index: 15;
+      transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                  visibility 0.28s;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+
+    .control-dock::-webkit-scrollbar {
+      width: 5px;
+    }
+    .control-dock::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    body.controls-hidden .control-dock,
+    body.controls-hidden .bottom-toolbar,
+    body.controls-hidden .brand-pill {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px) scale(0.98);
+      visibility: hidden;
+    }
+
+    .section {
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .section:last-child {
+      padding-bottom: 0;
+      margin-bottom: 0;
+      border-bottom: none;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 9px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-secondary);
+    }
+
+    /* Slider rows */
+    .control-row {
+      margin-bottom: 9px;
+    }
+
+    .control-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 12.5px;
+      margin-bottom: 4px;
+    }
+
+    .control-name {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .control-val {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: #ffd166;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid var(--accent);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    /* Dual-Tone Color Pickers */
+    .dual-tone-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .tone-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .tone-box:hover {
+      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .tone-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .tone-title {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .tone-hex {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+
+    .color-input-wrap {
+      position: relative;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+      flex-shrink: 0;
+    }
+
+    .color-input-wrap input[type="color"] {
+      position: absolute;
+      inset: -6px;
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: none;
+      cursor: pointer;
+    }
+
+    /* Color Swatch Presets Grid */
+    .swatches-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 7px;
+    }
+
+    .swatch-btn {
+      position: relative;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid rgba(255, 255, 255, 0.18);
+      cursor: pointer;
+      overflow: hidden;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .swatch-btn:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 255, 255, 0.65);
+    }
+
+    .swatch-btn.active {
+      border-color: #ffffff;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+    }
+
+    /* Quick Action Buttons Grid */
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .action-btn {
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .action-btn.primary {
+      background: linear-gradient(135deg, rgba(255, 94, 58, 0.32), rgba(255, 175, 55, 0.25));
+      border-color: rgba(255, 130, 80, 0.5);
+    }
+
+    .action-btn.primary:hover {
+      background: linear-gradient(135deg, rgba(255, 94, 58, 0.48), rgba(255, 175, 55, 0.38));
+    }
+
+    /* Segmented Pill Selector */
+    .seg-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .seg-btn {
+      padding: 5px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: transparent;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .seg-btn.active {
+      background: rgba(255, 255, 255, 0.16);
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Bottom Immediate Interaction Toolbar */
+    .bottom-toolbar {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border-glass);
+      border-radius: 999px;
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+      z-index: 15;
+      transition: opacity 0.28s ease, transform 0.28s ease, visibility 0.28s;
+      max-width: calc(100vw - 32px);
+      overflow-x: auto;
+    }
+
+    body.controls-hidden .bottom-toolbar {
+      transform: translate(-50%, 14px) scale(0.97);
+    }
+
+    .tool-chip {
+      padding: 7px 13px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tool-chip:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-primary);
+    }
+
+    .tool-chip.active {
+      background: rgba(255, 107, 74, 0.24);
+      border-color: rgba(255, 107, 74, 0.65);
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(255, 107, 74, 0.25);
+    }
+
+    .toolbar-divider {
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.14);
+      margin: 0 2px;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 768px) {
+      .control-dock {
+        width: calc(100vw - 32px);
+        max-height: 48vh;
+        top: auto;
+        bottom: 74px;
+        right: 16px;
+      }
+      .brand-stats {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="glCanvas"></canvas>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="brand-pill">
+      <div class="brand-dot" id="brandDot"></div>
+      <span class="brand-title">3D Lava Lamp Physics</span>
+      <div class="brand-stats">
+        <span id="statPhase">Stage 1: Still Flat-Top Pool</span>
+        <span>•</span>
+        <span id="statFps">60 FPS</span>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="icon-btn" id="toggleUiBtn" title="Hide or Show Controls (Shortcut: H)">
+        <span id="toggleUiIcon">👁️</span>
+        <span id="toggleUiText">Hide UI</span>
+        <span class="kbd-hint">H</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right Floating Control Dock -->
+  <aside class="control-dock" id="controlDock">
+    <!-- Dual-Tone Color & Brightness Section -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Dual-Tone Colors & Glow</span>
+        <span style="font-size:11px; color:var(--text-secondary);" id="presetLabel">Astro Magma</span>
+      </div>
+
+      <div class="dual-tone-row">
+        <label class="tone-box" title="Choose Wax Globule Color">
+          <div class="tone-info">
+            <span class="tone-title">Wax Tone</span>
+            <span class="tone-hex" id="waxHexText">#FF3B1F</span>
+          </div>
+          <div class="color-input-wrap">
+            <input type="color" id="waxColorPicker" value="#ff3b1f" />
+          </div>
+        </label>
+
+        <label class="tone-box" title="Choose Surrounding Liquid Color">
+          <div class="tone-info">
+            <span class="tone-title">Liquid Tone</span>
+            <span class="tone-hex" id="liquidHexText">#260947</span>
+          </div>
+          <div class="color-input-wrap">
+            <input type="color" id="liquidColorPicker" value="#260947" />
+          </div>
+        </label>
+      </div>
+
+      <div class="swatches-grid" id="swatchesGrid"></div>
+
+      <div class="control-row" style="margin-top: 10px;">
+        <div class="control-label">
+          <span class="control-name">Lamp Brightness & Glow</span>
+          <span class="control-val" id="valBrightness">125%</span>
+        </div>
+        <input type="range" id="sliderBrightness" min="0.4" max="2.2" step="0.05" value="1.25" />
+      </div>
+    </div>
+
+    <!-- Thermal, Viscosity & Emulsion Physics Section -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Thermodynamics & Emulsion</span>
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Coil Temperature (Heat)</span>
+          <span class="control-val" id="valTemp">76 °C</span>
+        </div>
+        <input type="range" id="sliderTemp" min="20" max="100" step="1" value="76" />
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Fluid Viscosity (μ)</span>
+          <span class="control-val" id="valViscosity">0.34 Pa·s</span>
+        </div>
+        <input type="range" id="sliderViscosity" min="0.10" max="1.00" step="0.02" value="0.34" />
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Wax Emulsion Density (ρ)</span>
+          <span class="control-val" id="valDensity">0.97 g/cm³</span>
+        </div>
+        <input type="range" id="sliderDensity" min="0.82" max="1.15" step="0.01" value="0.97" />
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Organic Shape Randomness</span>
+          <span class="control-val" id="valRandomness">85%</span>
+        </div>
+        <input type="range" id="sliderRandomness" min="0.0" max="1.2" step="0.02" value="0.85" />
+      </div>
+
+      <div class="control-row">
+        <div class="control-label">
+          <span class="control-name">Neck Smoothness & Coalescence</span>
+          <span class="control-val" id="valCoalescence">0.64</span>
+        </div>
+        <input type="range" id="sliderCoalescence" min="0.20" max="0.90" step="0.02" value="0.64" />
+      </div>
+    </div>
+
+    <!-- Lifecycle Speed & Lab Actions -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Lifecycle Speed & Actions</span>
+        <span style="font-size:10.5px; color:var(--text-secondary);" id="speedText">1.6x Natural</span>
+      </div>
+      <div class="seg-group" id="speedGroup" style="margin-bottom: 9px;">
+        <button class="seg-btn" data-speed="1.0">1x Calm</button>
+        <button class="seg-btn active" data-speed="1.6">1.6x Natural</button>
+        <button class="seg-btn" data-speed="3.2">3.2x Time-Lapse</button>
+      </div>
+
+      <div class="btn-grid">
+        <button class="action-btn primary" id="btnCoalesce" title="Reset to a completely still flat-topped bottom pool and start the full lifecycle">
+          <span>🔄</span> Still Pool Start
+        </button>
+        <button class="action-btn primary" id="btnErupt" title="Heat bottom pool to bulge & pinch off a rising plume">
+          <span>🔥</span> Pinch Plume
+        </button>
+        <button class="action-btn" id="btnMix" title="Swirl fluid to encourage mid-column collisions & combining">
+          <span>🌀</span> Gentle Swirl
+        </button>
+        <button class="action-btn" id="btnSpawn" title="Inject a warm rising globule from the base pool">
+          <span>💧</span> Spawn Blob
+        </button>
+      </div>
+    </div>
+
+    <!-- Performance & Quality -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Render Optimization</span>
+        <span style="font-size:10.5px; color:var(--text-secondary);" id="resScaleText">Balanced (Auto)</span>
+      </div>
+      <div class="seg-group" id="perfGroup">
+        <button class="seg-btn" data-scale="0.55">Fast</button>
+        <button class="seg-btn active" data-scale="0.80">Balanced</button>
+        <button class="seg-btn" data-scale="1.0">Ultra</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Immediate Interaction Mode Toolbar -->
+  <div class="bottom-toolbar" id="bottomToolbar">
+    <button class="tool-chip active" data-mode="stir" title="Drag on the lamp to gently stir the fluid & guide globules">
+      <span>👆</span> Stir & Guide
+    </button>
+    <button class="tool-chip" data-mode="heat" title="Click/hold on any blob to heat it up so it rises">
+      <span>☀️</span> Spot Heat
+    </button>
+    <button class="tool-chip" data-mode="orbit" title="Drag anywhere to orbit and inspect in 3D">
+      <span>🔄</span> 3D Orbit
+    </button>
+    <div class="toolbar-divider"></div>
+    <button class="tool-chip" id="btnQuickPreset1" title="Low-viscosity lively emulsion">⚡ Lively Cycle</button>
+    <button class="tool-chip" id="btnQuickPreset2" title="High-viscosity syrupy magma">🍯 Syrupy Lava</button>
+    <button class="tool-chip" id="btnQuickPreset3" title="Cool down so all blobs sink and coalesce into the flat-top pool">🧊 Cool & Settle</button>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. CURATED DUAL-TONE COLOR PRESETS (Wax Tone + Liquid Tone)
+    // =========================================================================
+    const COLOR_PRESETS = [
+      { name: "Astro Magma",       wax: "#ff3b1f", liquid: "#260947" },
+      { name: "Cyber Neon",        wax: "#00f5d4", liquid: "#1b063b" },
+      { name: "Solar Flare",       wax: "#ffaa00", liquid: "#4a0818" },
+      { name: "Bio Abyss",         wax: "#70e000", liquid: "#042430" },
+      { name: "Ultraviolet Rose",  wax: "#ff2a85", liquid: "#10073b" },
+      { name: "Sunset Lagoon",     wax: "#ff6d3a", liquid: "#08294a" },
+      { name: "Emerald Alchemy",   wax: "#10e878", liquid: "#061f18" },
+      { name: "Arctic Plasma",     wax: "#5ce1e6", liquid: "#0b132b" },
+      { name: "Obsidian Gold",     wax: "#ffcc33", liquid: "#121016" },
+      { name: "Peach Lavender",    wax: "#ff8566", liquid: "#2e1a47" }
+    ];
+
+    function hexToRgb01(hex) {
+      const clean = hex.replace("#", "");
+      const num = parseInt(clean, 16);
+      return [
+        ((num >> 16) & 255) / 255,
+        ((num >> 8) & 255) / 255,
+        (num & 255) / 255
+      ];
+    }
+
+    // =========================================================================
+    // 2. SIMULATION STATE & PARAMETERS
+    // =========================================================================
+    const MAX_BLOBS = 12;
+    const state = {
+      waxHex: COLOR_PRESETS[0].wax,
+      liquidHex: COLOR_PRESETS[0].liquid,
+      waxColor: hexToRgb01(COLOR_PRESETS[0].wax),
+      liquidColor: hexToRgb01(COLOR_PRESETS[0].liquid),
+      brightness: 1.25,
+
+      // Thermodynamics & Fluid Parameters
+      temperature: 76.0,      // 20..100 °C
+      viscosity: 0.34,        // 0.10..1.00 Pa·s
+      density: 0.97,          // 0.82..1.15 g/cm³
+      randomness: 0.85,       // 0.0..1.2 organic Rayleigh-Lamb droplet shape variety
+      coalescence: 0.64,      // 0.20..0.90 C2 cubic smin neck smoothness
+      simSpeed: 1.6,          // Lifecycle speed multiplier
+
+      // Base pool state (starts as a completely still flat-topped pool at the bottom!)
+      basePoolVolume: 0.56,
+      simTimeElapsed: 0.0,
+      nextPlumeReleaseTime: 0.9,
+      plumeCursor: 0,
+
+      // Camera & Interaction
+      camYaw: 0.35,
+      camPitch: 0.08,
+      camDist: 4.35,
+      interactionMode: "stir", // "stir", "heat", "orbit"
+      pointerDown: false,
+      pointerX: 0,
+      pointerY: 0,
+      pointerWorld: [0, -0.4, 0],
+      pointerVelWorld: [0, 0, 0],
+      swirlAngularVel: 0.0,
+
+      // Performance
+      renderScale: 0.80,
+      autoScaleFactor: 1.0,
+      fpsSmooth: 60.0
+    };
+
+    // =========================================================================
+    // 3. FULL 5-STAGE LAVA LAMP LIFECYCLE PHYSICS ENGINE
+    // =========================================================================
+    function containerRadiusAtY(y) {
+      const yn = Math.max(-1.0, Math.min(1.0, y / 1.18));
+      if (yn < -0.55) {
+        const t = (yn + 1.0) / 0.45;
+        return 0.46 + 0.17 * t;
+      } else {
+        const t = (yn + 0.55) / 1.55;
+        return 0.63 - 0.27 * t * (0.85 + 0.15 * t);
+      }
+    }
+
+    class WaxGlobule {
+      constructor(index) {
+        this.index = index;
+        this.resetInStillPool(index);
+      }
+
+      resetInStillPool(index) {
+        const sizeCycle = [0.148, 0.118, 0.162, 0.110, 0.140, 0.125, 0.154, 0.114];
+        this.baseRadius = sizeCycle[index % sizeCycle.length];
+        this.radius = this.baseRadius;
+        this.seedPhase = index * 4.19 + 0.73;
+        this.shapeAspect = 0.85 + 0.35 * Math.sin(index * 2.71);
+
+        const angle = (index / MAX_BLOBS) * Math.PI * 2.0 + index * 0.9;
+        const rad = 0.04 + 0.16 * ((index * 0.37) % 1.0);
+        this.x = Math.cos(angle) * rad;
+        this.z = Math.sin(angle) * rad;
+        this.y = -1.04 + (index % 3) * 0.035;
+
+        this.vx = 0.0;
+        this.vy = 0.0;
+        this.vz = 0.0;
+
+        this.temp = 0.25 + (index / MAX_BLOBS) * 0.20;
+        this.stage = 0; // 0=Pool, 1=Rising, 2=Top Cooling, 3=Falling
+        this.topDwellTimer = 0.0;
+        this.stretchY = 0.68;
+      }
+    }
+
+    const blobs = [];
+    for (let i = 0; i < MAX_BLOBS; i++) {
+      blobs.push(new WaxGlobule(i));
+    }
+
+    const statFps = document.getElementById("statFps");
+    const statPhase = document.getElementById("statPhase");
+
+    function updateLifecycleBadge() {
+      const poolFlatTopY = -1.12 + state.basePoolVolume * 0.82;
+      let neckingCount = 0, risingCount = 0, topCount = 0, fallingCount = 0;
+      for (let i = 0; i < MAX_BLOBS; i++) {
+        const b = blobs[i];
+        if (b.stage === 0) continue;
+        if (b.y < poolFlatTopY + 0.24 && b.stage === 1) neckingCount++;
+        else if (b.stage === 1) risingCount++;
+        else if (b.stage === 2) topCount++;
+        else if (b.stage === 3) fallingCount++;
+      }
+
+      if (neckingCount === 0 && risingCount === 0 && topCount === 0 && fallingCount === 0) {
+        statPhase.textContent = "Stage 1: Still Flat-Top Pool";
+      } else if (neckingCount > 0 && risingCount === 0 && topCount === 0 && fallingCount === 0) {
+        statPhase.textContent = "Stage 2: Plume Bulging & Necking";
+      } else if (topCount === 0 && fallingCount === 0) {
+        statPhase.textContent = "Stage 3: Rising & Combining";
+      } else if (fallingCount === 0) {
+        statPhase.textContent = "Stage 4: Top Dwelling & Cooling";
+      } else {
+        statPhase.textContent = "Stage 5: Full Cycle (Rising & Falling)";
+      }
+    }
+
+    function startFromStillFlatTopPool() {
+      state.basePoolVolume = 0.56;
+      state.simTimeElapsed = 0.0;
+      state.nextPlumeReleaseTime = 0.9;
+      state.plumeCursor = 0;
+      for (let i = 0; i < MAX_BLOBS; i++) {
+        blobs[i].resetInStillPool(i);
+      }
+      updateLifecycleBadge();
+    }
+
+    function triggerSinglePlumeFromPool() {
+      for (let k = 0; k < MAX_BLOBS; k++) {
+        const idx = (state.plumeCursor + k) % MAX_BLOBS;
+        const b = blobs[idx];
+        if (b.stage === 0) {
+          state.plumeCursor = (idx + 1) % MAX_BLOBS;
+          b.stage = 1;
+          b.temp = 0.88 + (idx % 3) * 0.04;
+          const ang = idx * 2.1 + state.simTimeElapsed * 0.45;
+          const r = 0.04 + (idx % 3) * 0.05;
+          b.x = Math.cos(ang) * r;
+          b.z = Math.sin(ang) * r;
+          const poolFlatTopY = -1.12 + state.basePoolVolume * 0.82;
+          b.y = poolFlatTopY - b.radius * 0.85;
+          b.vy = 0.12;
+          b.stretchY = 0.85;
+          return;
+        }
+      }
+    }
+
+    function stepPhysics(rawDt, time) {
+      const h = Math.min(rawDt * state.simSpeed, 0.045);
+      state.simTimeElapsed += h;
+
+      const heaterNorm = (state.temperature - 20.0) / 80.0;
+      const visc = state.viscosity;
+      const fluidDrag = 1.45 + visc * 2.8;
+      const densityOffset = (state.density - 0.97) * 2.2;
+      const neutralTemp = 0.48 + densityOffset * 0.22;
+
+      state.swirlAngularVel *= Math.exp(-1.8 * h);
+
+      // Mass conservation between flat-top pool and active blobs
+      let submergedMass = 0.0;
+      const currentPoolTopEst = -1.12 + state.basePoolVolume * 0.82;
+      for (let i = 0; i < MAX_BLOBS; i++) {
+        const b = blobs[i];
+        if (b.stage === 0) {
+          submergedMass += b.baseRadius * b.baseRadius * 3.2;
+        } else {
+          const sub = Math.max(0.0, Math.min(1.0, (currentPoolTopEst + 0.05 - b.y) / (b.radius * 2.0)));
+          submergedMass += sub * (b.baseRadius * b.baseRadius * 3.2);
+        }
+      }
+      const targetPoolVol = 0.20 + Math.min(0.36, submergedMass * 0.36);
+      state.basePoolVolume += (targetPoolVol - state.basePoolVolume) * Math.min(1.0, h * 3.5);
+      const poolFlatTopY = -1.12 + state.basePoolVolume * 0.82;
+
+      // Plume release rhythm from bottom pool (releases plumes at a steady cadence so 5-7 blobs cycle simultaneously)
+      const plumeInterval = (0.95 + visc * 1.15) / Math.max(0.25, heaterNorm * 1.35);
+      if (heaterNorm > neutralTemp * 0.82 && state.simTimeElapsed >= state.nextPlumeReleaseTime) {
+        triggerSinglePlumeFromPool();
+        state.nextPlumeReleaseTime = state.simTimeElapsed + plumeInterval;
+      }
+
+      for (let i = 0; i < MAX_BLOBS; i++) {
+        const b = blobs[i];
+
+        if (heaterNorm < neutralTemp * 0.75) {
+          b.temp = Math.max(0.10, b.temp - 0.35 * h);
+          if (b.stage === 1 || b.stage === 2) {
+            if (b.temp < neutralTemp) b.stage = 3;
+          }
+        }
+
+        if (b.stage === 0) {
+          const restY = poolFlatTopY - b.radius * 0.90 - (i % 3) * 0.03;
+          b.y += (restY - b.y) * Math.min(1.0, h * 5.0);
+          b.vx *= Math.exp(-4.0 * h);
+          b.vy *= Math.exp(-4.0 * h);
+          b.vz *= Math.exp(-4.0 * h);
+          b.stretchY += (0.65 - b.stretchY) * Math.min(1.0, h * 4.0);
+          b.temp += (heaterNorm * 0.75 - b.temp) * 0.5 * h;
+          continue;
+        }
+
+        if (b.stage === 1) {
+          // STAGE 1: Bulging from pool, necking off & slowly rising to top
+          if (b.y < poolFlatTopY + 0.22) {
+            b.temp = Math.min(0.98, b.temp + 0.38 * heaterNorm * h);
+          } else {
+            b.temp = Math.max(neutralTemp + 0.20, b.temp - 0.015 * h);
+          }
+
+          if (b.y >= 0.64) {
+            b.stage = 2;
+            b.topDwellTimer = 1.6 + visc * 1.8 + (i % 2) * 0.6;
+          }
+        } else if (b.stage === 2) {
+          // STAGE 2: Dwelling near the top cap, combining with other top blobs & cooling down
+          b.topDwellTimer -= h;
+          const coolRate = (0.24 + 0.12 * (1.0 - heaterNorm)) / (0.5 + visc * 0.5);
+          b.temp = Math.max(0.14, b.temp - coolRate * h);
+
+          if (b.topDwellTimer <= 0.0 && b.temp < neutralTemp - 0.04) {
+            b.stage = 3; // Cooled! Start falling back down
+          }
+        } else if (b.stage === 3) {
+          // STAGE 3: Falling back down as a cool globule & coalescing into the bottom pool
+          b.temp = Math.max(0.18, b.temp - 0.05 * h);
+
+          if (b.y <= poolFlatTopY - b.radius * 0.45) {
+            b.stage = 0; // Merged back into the flat-topped bottom pool!
+            b.vy = 0.0;
+            continue;
+          }
+        }
+
+        // Spot heat interaction
+        if (state.pointerDown && state.interactionMode === "heat") {
+          const dxP = b.x - state.pointerWorld[0];
+          const dyP = b.y - state.pointerWorld[1];
+          const dzP = b.z - state.pointerWorld[2];
+          const d2 = dxP * dxP + dyP * dyP + dzP * dzP;
+          if (d2 < 0.38) {
+            b.temp = Math.min(0.98, b.temp + 1.5 * (1.0 - d2 / 0.38) * h);
+            if (b.temp > neutralTemp + 0.05) b.stage = 1;
+          }
+        }
+
+        // Unhurried, graceful buoyancy force (smaller blobs rise slightly faster to catch & combine with larger blobs!)
+        const sizeSpeedMod = 1.18 - b.baseRadius * 1.1;
+        const buoyancyGain = (1.95 * sizeSpeedMod) / (0.45 + visc * 0.55);
+        let fy = (b.temp - neutralTemp) * buoyancyGain;
+
+        // Surface-tension necking drag right as the blob bulges and pinches off from the flat pool
+        const distAbovePool = b.y - poolFlatTopY;
+        if (b.stage === 1 && distAbovePool > -0.12 && distAbovePool < b.radius * 1.45) {
+          fy *= 0.65;
+        }
+
+        const rHoriz = Math.hypot(b.x, b.z) + 1e-5;
+        const targetRadial = (b.stage === 1) ? 0.08 : (b.stage === 2 ? 0.07 : 0.19);
+        const radialForce = (targetRadial - rHoriz) * 0.55;
+
+        const wanderX = Math.sin(b.y * 2.4 + time * 0.65 + b.seedPhase) * 0.08;
+        const wanderZ = Math.cos(b.y * 2.2 - time * 0.58 + b.seedPhase) * 0.08;
+
+        const swirlVx = -b.z * state.swirlAngularVel;
+        const swirlVz =  b.x * state.swirlAngularVel;
+
+        let fx = (b.x / rHoriz) * radialForce + wanderX + swirlVx;
+        let fz = (b.z / rHoriz) * radialForce + wanderZ + swirlVz;
+
+        // --- SHORT-RANGE PAIRWISE INTERACTIONS (Combining vs. Counter-Current Slip) ---
+        for (let j = 0; j < MAX_BLOBS; j++) {
+          if (i === j) continue;
+          const o = blobs[j];
+          if (o.stage === 0) continue;
+
+          const dx = o.x - b.x;
+          const dy = o.y - b.y;
+          const dz = o.z - b.z;
+          const distSq = dx * dx + dy * dy + dz * dz + 1e-5;
+          const dist = Math.sqrt(distSq);
+          const sumR = b.radius + o.radius;
+
+          if (dist < sumR * 1.48) {
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const nz = dz / dist;
+
+            const bothRisingOrTop = (b.stage <= 2 && o.stage <= 2);
+            const bothFalling = (b.stage === 3 && o.stage === 3);
+
+            if (bothRisingOrTop || bothFalling) {
+              const mergeEq = sumR * 0.64;
+              if (dist > mergeEq) {
+                const pull = state.coalescence * 0.58 * (1.0 - dist / (sumR * 1.48));
+                fx += nx * pull;
+                fy += Math.max(0.0, ny) * pull * 0.75;
+                fz += nz * pull;
+              } else {
+                const push = 1.35 * (mergeEq - dist) / mergeEq;
+                fx -= nx * push;
+                fy -= ny * push * 0.5;
+                fz -= nz * push;
+              }
+            } else {
+              // Counter-current interaction between rising warm blob & falling cool blob
+              if (dist < sumR * 1.18) {
+                const push = 1.65 * (sumR * 1.18 - dist) / (sumR * 1.18);
+                fx -= nx * push * 1.25;
+                fz -= nz * push * 1.25;
+                fx += -nz * 0.50;
+                fz +=  nx * 0.50;
+                b.temp += (o.temp - b.temp) * 0.14 * h;
+              }
+            }
+          }
+        }
+
+        // Cursor stirring
+        if (state.pointerDown && state.interactionMode === "stir") {
+          const dxP = b.x - state.pointerWorld[0];
+          const dyP = b.y - state.pointerWorld[1];
+          const dzP = b.z - state.pointerWorld[2];
+          const d2 = dxP * dxP + dyP * dyP + dzP * dzP;
+          if (d2 < 0.48) {
+            const influence = (1.0 - d2 / 0.48);
+            fx += state.pointerVelWorld[0] * influence * 3.5;
+            fy += state.pointerVelWorld[1] * influence * 3.5;
+            fz += state.pointerVelWorld[2] * influence * 2.5;
+          }
+        }
+
+        b.vx = (b.vx + fx * h) * Math.exp(-fluidDrag * h);
+        b.vy = (b.vy + fy * h) * Math.exp(-fluidDrag * h);
+        b.vz = (b.vz + fz * h) * Math.exp(-fluidDrag * h);
+
+        b.x += b.vx * h;
+        b.y += b.vy * h;
+        b.z += b.vz * h;
+
+        const maxWallR = Math.max(0.10, containerRadiusAtY(b.y) - b.radius * 0.86);
+        const currR = Math.hypot(b.x, b.z);
+        if (currR > maxWallR) {
+          const scale = maxWallR / currR;
+          b.x *= scale;
+          b.z *= scale;
+          const rnx = b.x / maxWallR;
+          const rnz = b.z / maxWallR;
+          const vRad = b.vx * rnx + b.vz * rnz;
+          if (vRad > 0) {
+            b.vx -= rnx * vRad * 1.2;
+            b.vz -= rnz * vRad * 1.2;
+          }
+        }
+
+        const topLimit = 0.96 - b.radius * 0.65;
+        if (b.y > topLimit) {
+          b.y = topLimit;
+          if (b.vy > 0) b.vy *= -0.15;
+        }
+
+        let targetStretch = 1.08 + Math.min(0.38, Math.abs(b.vy) * 1.25);
+        if (distAbovePool > -0.10 && distAbovePool < b.radius * 1.5) {
+          targetStretch = 1.36;
+        } else if (b.stage === 2 && b.y > 0.60) {
+          targetStretch = 0.72;
+        }
+        b.stretchY += (targetStretch - b.stretchY) * Math.min(1.0, h * 4.5);
+        b.radius = b.baseRadius * (0.94 + 0.12 * b.temp);
+      }
+
+      updateLifecycleBadge();
+    }
+
+    // =========================================================================
+    // 4. WEBGL RAYMARCHING ENGINE (Rayleigh-Lamb Droplet Harmonics + C2 Cubic smin)
+    // =========================================================================
+    const canvas = document.getElementById("glCanvas");
+    const glOpts = {
+      alpha: false,
+      antialias: true,
+      depth: false,
+      stencil: false,
+      powerPreference: "high-performance"
+    };
+    const gl = canvas.getContext("webgl2", glOpts) ||
+               canvas.getContext("webgl", glOpts) ||
+               canvas.getContext("experimental-webgl", glOpts);
+
+    let prog = null;
+    let uLoc = {};
+    let vbo = null;
+
+    if (gl) {
+      const vsSource = `
+      precision highp float;
+      attribute vec2 aPos;
+      varying vec2 vUv;
+      void main() {
+        vUv = aPos * 0.5 + 0.5;
+        gl_Position = vec4(aPos, 0.0, 1.0);
+      }
+      `;
+
+      const fsSource = `
+      precision highp float;
+
+      varying vec2 vUv;
+
+      uniform vec2 uResolution;
+      uniform float uTime;
+      uniform vec3 uCamPos;
+      uniform mat3 uCamMat;
+
+      uniform vec3 uWaxColor;
+      uniform vec3 uLiquidColor;
+      uniform float uBrightness;
+      uniform float uRandomness;
+      uniform float uCoalescence;
+      uniform float uPoolTopY;
+      uniform float uHeaterNorm;
+
+      #define NUM_BLOBS 12
+      uniform vec4 uBlobs[NUM_BLOBS];
+      uniform vec4 uBlobShape[NUM_BLOBS];
+      uniform vec4 uBlobModes[NUM_BLOBS];
+
+      float sminCubic(float a, float b, float k) {
+        float h = max(k - abs(a - b), 0.0) / max(k, 0.0001);
+        return min(a, b) - h * h * h * k * (1.0 / 6.0);
+      }
+
+      float smaxCubic(float a, float b, float k) {
+        return -sminCubic(-a, -b, k);
+      }
+
+      float glassRadiusAtY(float y) {
+        float yn = clamp(y * 0.847457, -1.0, 1.0);
+        if (yn < -0.55) {
+          float t = (yn + 1.0) * 2.2222;
+          return 0.46 + 0.17 * t;
+        } else {
+          float t = (yn + 0.55) * 0.64516;
+          return 0.63 - 0.27 * t * (0.85 + 0.15 * t);
+        }
+      }
+
+      vec2 lampVesselSDF(vec3 p) {
+        float r = length(p.xz);
+        float gRad = glassRadiusAtY(p.y);
+        float dGlass = max(r - gRad, abs(p.y) - 1.18);
+
+        float bNorm = clamp((p.y + 1.72) * 1.724, 0.0, 1.0);
+        float baseRad = mix(0.68, 0.46, bNorm * (1.35 - 0.35 * bNorm));
+        float dBase = max(r - baseRad, max(-1.72 - p.y, p.y + 1.14));
+
+        float cNorm = clamp((p.y - 1.14) * 2.941, 0.0, 1.0);
+        float capRad = mix(0.37, 0.25, cNorm);
+        float dCap = max(r - capRad, max(1.14 - p.y, p.y - 1.48));
+
+        float partId = 1.0;
+        float d = dGlass;
+        if (dBase < d) { d = dBase; partId = 2.0; }
+        if (dCap < d)  { d = dCap;  partId = 3.0; }
+        return vec2(d, partId);
+      }
+
+      vec2 evalWaxSDF(vec3 p) {
+        float innerWallR = glassRadiusAtY(p.y) - 0.026;
+        float dContainerInner = max(length(p.xz) - innerWallR, abs(p.y) - 1.15);
+
+        float gentleBreathing = 0.0025 * uHeaterNorm * sin(p.x * 3.0 + uTime * 0.8) * cos(p.z * 3.0 - uTime * 0.7);
+        float rRatio = length(p.xz) / max(innerWallR, 0.1);
+        float edgeMeniscus = 0.010 * (rRatio * rRatio * rRatio * rRatio);
+
+        float dFlatPlaneTop = p.y - (uPoolTopY + gentleBreathing - edgeMeniscus);
+        float dWax = dFlatPlaneTop;
+        float blendedTemp = clamp(0.38 + 0.52 * uHeaterNorm, 0.1, 1.0);
+
+        for (int i = 0; i < NUM_BLOBS; i++) {
+          vec4 shape = uBlobShape[i];
+          float kLocal = shape.w;
+          if (kLocal < 0.001) continue;
+
+          vec4 b = uBlobs[i];
+          if (abs(p.y - b.y) > b.w * 2.8 + kLocal) continue;
+
+          vec4 modes = uBlobModes[i];
+          vec3 q = p - b.xyz;
+
+          float qySoft = q.y / (b.w + abs(q.y) * 0.65);
+          float taper = 1.0 - shape.z * qySoft;
+
+          q.xz *= shape.y * taper;
+          q.y  *= shape.x;
+
+          float rLen = length(q);
+          vec3 nDir = q / max(rLen, 0.0001);
+          float y2 = (nDir.x * nDir.x - nDir.z * nDir.z) * modes.y + (nDir.x * nDir.y) * modes.z;
+          float y3 = (nDir.z * (3.0 * nDir.x * nDir.x - nDir.z * nDir.z) + nDir.y * nDir.x * nDir.z) * modes.w;
+
+          float dBlob = (rLen - b.w * (1.0 + y2 + y3)) * 0.82;
+
+          float h = clamp(0.5 + 0.5 * (dBlob - dWax) / kLocal, 0.0, 1.0);
+          blendedTemp = mix(modes.x, blendedTemp, h);
+          dWax = sminCubic(dWax, dBlob, kLocal);
+        }
+
+        dWax = smaxCubic(dWax, dContainerInner, 0.032);
+        return vec2(dWax, blendedTemp);
+      }
+
+      vec3 calcWaxNormal(vec3 p) {
+        const float eps = 0.003;
+        vec2 e = vec2(1.0, -1.0) * eps;
+        return normalize(
+          e.xyy * evalWaxSDF(p + e.xyy).x +
+          e.yyx * evalWaxSDF(p + e.yyx).x +
+          e.yxy * evalWaxSDF(p + e.yxy).x +
+          e.xxx * evalWaxSDF(p + e.xxx).x
+        );
+      }
+
+      vec3 calcVesselNormal(vec3 p) {
+        const float eps = 0.003;
+        vec2 e = vec2(1.0, -1.0) * eps;
+        return normalize(
+          e.xyy * lampVesselSDF(p + e.xyy).x +
+          e.yyx * lampVesselSDF(p + e.yyx).x +
+          e.yxy * lampVesselSDF(p + e.yxy).x +
+          e.xxx * lampVesselSDF(p + e.xxx).x
+        );
+      }
+
+      vec2 intersectBoundingCylinder(vec3 ro, vec3 rd, float r, float yMin, float yMax) {
+        float a = dot(rd.xz, rd.xz);
+        float b = 2.0 * dot(ro.xz, rd.xz);
+        float c = dot(ro.xz, ro.xz) - r * r;
+        float disc = b * b - 4.0 * a * c;
+        if (disc < 0.0) return vec2(1e5, -1e5);
+        float s = sqrt(disc);
+        float inv2a = 0.5 / max(a, 1e-6);
+        float t0 = (-b - s) * inv2a;
+        float t1 = (-b + s) * inv2a;
+
+        float invRy = 1.0 / (abs(rd.y) < 1e-5 ? 1e-5 : rd.y);
+        float ty0 = (yMin - ro.y) * invRy;
+        float ty1 = (yMax - ro.y) * invRy;
+        if (ty0 > ty1) { float tmp = ty0; ty0 = ty1; ty1 = tmp; }
+
+        return vec2(max(t0, ty0), min(t1, ty1));
+      }
+
+      void main() {
+        vec2 ndc = (gl_FragCoord.xy * 2.0 - uResolution.xy) / uResolution.y;
+        vec3 ro = uCamPos;
+        vec3 rd = normalize(uCamMat * vec3(ndc, 1.95));
+
+        vec3 waxLin = uWaxColor * uWaxColor;
+        vec3 liqLin = max(uLiquidColor * uLiquidColor, vec3(0.006, 0.004, 0.015));
+
+        float radialBg = length(ndc);
+        vec3 bgDark = vec3(0.003, 0.004, 0.009);
+        vec3 haloGlow = mix(liqLin, waxLin, 0.38) * (0.26 * uBrightness) * exp(-radialBg * 1.6);
+        float coilGlowBg = exp(-length(ndc - vec2(0.0, -0.42)) * 2.6) * (0.22 * uBrightness * (0.4 + 0.6 * uHeaterNorm));
+        vec3 col = bgDark + haloGlow + waxLin * coilGlowBg;
+
+        if (rd.y < -0.001) {
+          float tFloor = (-1.72 - ro.y) / rd.y;
+          if (tFloor > 0.0 && tFloor < 12.0) {
+            vec3 pFloor = ro + rd * tFloor;
+            float rFloor = length(pFloor.xz);
+            float shadow = smoothstep(0.45, 0.85, rFloor);
+            float rimBounce = exp(-abs(rFloor - 0.72) * 3.0) * 0.22 * uBrightness;
+            vec3 floorCol = vec3(0.006, 0.008, 0.015) * shadow + mix(waxLin, liqLin, 0.45) * rimBounce;
+            col = mix(col, floorCol, exp(-rFloor * 0.45) * 0.85);
+          }
+        }
+
+        vec2 cylHit = intersectBoundingCylinder(ro, rd, 0.70, -1.74, 1.50);
+        if (cylHit.x > cylHit.y || cylHit.y < 0.0) {
+          col = col / (1.0 + col * 0.65);
+          gl_FragColor = vec4(sqrt(clamp(col, 0.0, 1.0)), 1.0);
+          return;
+        }
+
+        float tStart = max(0.05, cylHit.x - 0.02);
+        float tEnd = min(8.0, cylHit.y + 0.02);
+
+        float tVessel = tStart;
+        float hitPart = 0.0;
+        bool vesselFound = false;
+        for (int i = 0; i < 26; i++) {
+          vec3 p = ro + rd * tVessel;
+          vec2 vRes = lampVesselSDF(p);
+          if (vRes.x < 0.0025) {
+            hitPart = vRes.y;
+            vesselFound = true;
+            break;
+          }
+          tVessel += vRes.x * 0.9;
+          if (tVessel > tEnd) break;
+        }
+
+        if (!vesselFound) {
+          col = col / (1.0 + col * 0.65);
+          gl_FragColor = vec4(sqrt(clamp(col, 0.0, 1.0)), 1.0);
+          return;
+        }
+
+        vec3 pHit = ro + rd * tVessel;
+        vec3 nVessel = calcVesselNormal(pHit);
+        vec3 vDir = -rd;
+
+        vec3 lightKey = normalize(vec3(0.70, 0.80, 0.85));
+        vec3 lightRim = normalize(vec3(-0.85, 0.30, -0.55));
+
+        if (hitPart > 1.5) {
+          float diffK = max(0.0, dot(nVessel, lightKey));
+          float diffR = max(0.0, dot(nVessel, lightRim));
+          vec3 halfK = normalize(lightKey + vDir);
+          float nh = max(0.0, dot(nVessel, halfK));
+          float nh4 = nh * nh * nh * nh;
+          float fTerm = 1.0 - max(0.0, dot(nVessel, vDir));
+          float fres = fTerm * fTerm * fTerm;
+
+          vec3 metalBase = vec3(0.035, 0.04, 0.06);
+          float collarProx = exp(-abs(abs(pHit.y) - 1.16) * 14.0);
+          vec3 waxBounce = mix(liqLin, waxLin, 0.75) * collarProx * 0.65 * uBrightness;
+
+          col = metalBase * (0.30 + 0.85 * diffK + 0.35 * diffR)
+              + vec3(0.55, 0.62, 0.78) * (nh4 * nh4) * 0.50
+              + mix(liqLin, vec3(0.25, 0.30, 0.45), 0.5) * fres * 0.35
+              + waxBounce;
+        } else {
+          vec3 rdIn = normalize(refract(rd, nVessel, 0.90));
+          if (length(rdIn) < 0.001) rdIn = rd;
+
+          float tIn = 0.014;
+          float tPrev = tIn;
+          float dPrev = 1.0;
+          float tMaxIn = 1.38;
+          bool hitWax = false;
+          vec3 pWax = pHit;
+          float waxTemp = 0.5;
+          float closestWaxDist = 10.0;
+          float opticalDepth = 0.0;
+
+          for (int step = 0; step < 40; step++) {
+            vec3 p = pHit + rdIn * tIn;
+            if (abs(p.y) > 1.19 || length(p.xz) > glassRadiusAtY(p.y) + 0.02) {
+              break;
+            }
+
+            vec2 res = evalWaxSDF(p);
+            float d = res.x;
+            closestWaxDist = min(closestWaxDist, max(0.0, d));
+
+            if (d < 0.002) {
+              float frac = clamp(dPrev / max(dPrev - d, 0.0001), 0.0, 1.0);
+              float tExact = mix(tPrev, tIn, frac);
+              pWax = pHit + rdIn * tExact;
+              waxTemp = evalWaxSDF(pWax).y;
+              tIn = tExact;
+              hitWax = true;
+              break;
+            }
+
+            tPrev = tIn;
+            dPrev = d;
+            float stepSize = max(0.014, d * 0.78);
+            tIn += stepSize;
+            opticalDepth += stepSize;
+            if (tIn > tMaxIn) break;
+          }
+
+          float heightNorm = clamp((pHit.y + 1.18) * 0.4237, 0.0, 1.0);
+          float bottomCoilLight = exp(-heightNorm * 2.3) * (0.35 + 0.65 * uHeaterNorm);
+
+          vec3 liquidCol = liqLin * (0.85 + 1.15 * (1.0 - heightNorm * 0.55)) * uBrightness
+                         + mix(liqLin, waxLin, 0.42) * bottomCoilLight * 0.32 * uBrightness;
+
+          float nearWaxHalo = exp(-closestWaxDist * 11.5) * 0.30 * uBrightness;
+          vec3 interiorCol = liquidCol * (0.45 + 0.55 * (1.0 - exp(-opticalDepth * 1.8)))
+                           + waxLin * nearWaxHalo;
+
+          if (hitWax) {
+            vec3 nWax = calcWaxNormal(pWax);
+
+            float sssSample = clamp(evalWaxSDF(pWax + rdIn * 0.08).x * 12.5, 0.0, 1.0);
+            float aoSample  = clamp(evalWaxSDF(pWax + nWax * 0.06).x * 16.0, 0.32, 1.0);
+            float sssFactor = (1.0 - sssSample);
+
+            vec3 shadowWax = mix(waxLin * 0.16, liqLin * 0.35, 0.25);
+            vec3 hotCore   = mix(waxLin * 1.35, vec3(1.0, 0.58, 0.14) * max(waxLin.r, 0.4) + waxLin * 0.8, 0.38 * waxTemp);
+
+            float diffKey = clamp(dot(nWax, lightKey) * 0.5 + 0.5, 0.0, 1.0);
+            float botUpLight = clamp(-nWax.y * 0.5 + 0.5, 0.0, 1.0) * exp(-heightNorm * 1.6);
+            float fw = 1.0 - max(0.0, dot(nWax, -rdIn));
+            float fresWax = fw * fw * fw;
+
+            vec3 halfVec = normalize(lightKey - rdIn);
+            float sw = max(0.0, dot(nWax, halfVec));
+            float sw4 = sw * sw * sw * sw;
+            float specWax = sw4 * sw4 * sw4;
+
+            vec3 waxSurface = mix(shadowWax, waxLin * 0.95, diffKey) * aoSample
+                            + hotCore * (0.20 + 0.52 * sssFactor * (0.6 + 0.6 * waxTemp) + 0.32 * botUpLight * uHeaterNorm)
+                            + mix(waxLin, vec3(1.0, 0.85, 0.65), 0.25) * fresWax * 0.40;
+
+            waxSurface *= uBrightness;
+            waxSurface += vec3(0.95, 0.90, 0.85) * specWax * 0.30;
+
+            float liquidTransmit = exp(-tIn * 0.65);
+            interiorCol = mix(liquidCol * 0.9, waxSurface, liquidTransmit);
+          }
+
+          float coilMask = smoothstep(-1.02, -1.17, pHit.y) * (1.0 - nVessel.x * nVessel.x);
+          interiorCol += mix(waxLin, vec3(1.0, 0.65, 0.2), 0.35) * coilMask * (0.45 * uBrightness * (0.3 + 0.7 * uHeaterNorm));
+
+          float gf = 1.0 - max(0.0, dot(nVessel, vDir));
+          float glassFresnel = gf * gf * gf;
+          vec3 hKey = normalize(lightKey + vDir);
+          float gk = max(0.0, dot(nVessel, hKey));
+          float gk4 = gk * gk * gk * gk;
+          float glassSpec1 = gk4 * gk4 * gk4 * gk4;
+
+          float tubeHighlight = smoothstep(0.86, 0.97, dot(normalize(vec2(nVessel.x, nVessel.z)), normalize(vec2(0.65, 0.75))))
+                              * (1.0 - abs(nVessel.y));
+
+          col = interiorCol
+              + mix(liqLin, vec3(0.65, 0.78, 1.0), 0.5) * glassFresnel * 0.36
+              + vec3(1.0) * (glassSpec1 * 0.75 + tubeHighlight * 0.11);
+        }
+
+        col = col / (1.0 + col * 0.65);
+        gl_FragColor = vec4(sqrt(clamp(col, 0.0, 1.0)), 1.0);
+      }
+      `;
+
+      function compileShader(type, source) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, source);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+          console.error("Shader compile error:", gl.getShaderInfoLog(s));
+        }
+        return s;
+      }
+
+      prog = gl.createProgram();
+      gl.attachShader(prog, compileShader(gl.VERTEX_SHADER, vsSource));
+      gl.attachShader(prog, compileShader(gl.FRAGMENT_SHADER, fsSource));
+      gl.bindAttribLocation(prog, 0, "aPos");
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        console.error("Program link error:", gl.getProgramInfoLog(prog));
+      }
+      gl.useProgram(prog);
+
+      vbo = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1, -1,
+         3, -1,
+        -1,  3
+      ]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      uLoc = {
+        uResolution: gl.getUniformLocation(prog, "uResolution"),
+        uTime: gl.getUniformLocation(prog, "uTime"),
+        uCamPos: gl.getUniformLocation(prog, "uCamPos"),
+        uCamMat: gl.getUniformLocation(prog, "uCamMat"),
+        uWaxColor: gl.getUniformLocation(prog, "uWaxColor"),
+        uLiquidColor: gl.getUniformLocation(prog, "uLiquidColor"),
+        uBrightness: gl.getUniformLocation(prog, "uBrightness"),
+        uRandomness: gl.getUniformLocation(prog, "uRandomness"),
+        uCoalescence: gl.getUniformLocation(prog, "uCoalescence"),
+        uPoolTopY: gl.getUniformLocation(prog, "uPoolTopY"),
+        uHeaterNorm: gl.getUniformLocation(prog, "uHeaterNorm"),
+        uBlobs: gl.getUniformLocation(prog, "uBlobs"),
+        uBlobShape: gl.getUniformLocation(prog, "uBlobShape"),
+        uBlobModes: gl.getUniformLocation(prog, "uBlobModes")
+      };
+    }
+
+    const blobPosData   = new Float32Array(MAX_BLOBS * 4);
+    const blobShapeData = new Float32Array(MAX_BLOBS * 4);
+    const blobModesData = new Float32Array(MAX_BLOBS * 4);
+
+    // =========================================================================
+    // 5. CAMERA & ADAPTIVE RESIZE HANDLING (Right-Handed +Y Up!)
+    // =========================================================================
+    function updateCanvasSize() {
+      const effScale = state.renderScale * state.autoScaleFactor;
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.75) * effScale;
+      const w = Math.max(320, Math.floor(window.innerWidth * dpr));
+      const h = Math.max(240, Math.floor(window.innerHeight * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+        if (gl) gl.viewport(0, 0, w, h);
+      }
+    }
+    window.addEventListener("resize", updateCanvasSize);
+    updateCanvasSize();
+
+    function computeCamera(yaw, pitch, dist) {
+      const cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const cy = Math.cos(yaw),   sy = Math.sin(yaw);
+      const target = [0, -0.10, 0];
+      const camPos = [dist * cp * sy, target[1] + dist * sp, dist * cp * cy];
+
+      let fx = target[0] - camPos[0];
+      let fy = target[1] - camPos[1];
+      let fz = target[2] - camPos[2];
+      const fl = Math.hypot(fx, fy, fz) || 1;
+      fx /= fl; fy /= fl; fz /= fl;
+
+      let rx = -fz;
+      let ry = 0;
+      let rz = fx;
+      const rl = Math.hypot(rx, ry, rz) || 1;
+      rx /= rl; rz /= rl;
+
+      const ux = ry * fz - rz * fy;
+      const uy = rz * fx - rx * fz;
+      const uz = rx * fy - ry * fx;
+
+      const camMat = new Float32Array([
+        rx, ry, rz,
+        ux, uy, uz,
+        fx, fy, fz
+      ]);
+      return { camPos, camMat, right: [rx, ry, rz], up: [ux, uy, uz], forward: [fx, fy, fz] };
+    }
+
+    // =========================================================================
+    // 6. UI BINDINGS, DUAL-TONE SWATCHES & HIDEABLE CONTROLS
+    // =========================================================================
+    const swatchesGrid = document.getElementById("swatchesGrid");
+    const waxColorPicker = document.getElementById("waxColorPicker");
+    const liquidColorPicker = document.getElementById("liquidColorPicker");
+    const waxHexText = document.getElementById("waxHexText");
+    const liquidHexText = document.getElementById("liquidHexText");
+    const presetLabel = document.getElementById("presetLabel");
+    const brandDot = document.getElementById("brandDot");
+
+    function applyColors(waxHex, liquidHex, labelText = "Custom Dual-Tone") {
+      state.waxHex = waxHex;
+      state.liquidHex = liquidHex;
+      state.waxColor = hexToRgb01(waxHex);
+      state.liquidColor = hexToRgb01(liquidHex);
+
+      waxColorPicker.value = waxHex;
+      liquidColorPicker.value = liquidHex;
+      waxHexText.textContent = waxHex.toUpperCase();
+      liquidHexText.textContent = liquidHex.toUpperCase();
+      presetLabel.textContent = labelText;
+      brandDot.style.background = `linear-gradient(135deg, ${waxHex}, ${liquidHex})`;
+      brandDot.style.boxShadow = `0 0 12px ${waxHex}`;
+    }
+
+    COLOR_PRESETS.forEach((preset, idx) => {
+      const btn = document.createElement("button");
+      btn.className = "swatch-btn" + (idx === 0 ? " active" : "");
+      btn.title = `${preset.name} (Wax: ${preset.wax}, Liquid: ${preset.liquid})`;
+      btn.style.background = `linear-gradient(135deg, ${preset.wax} 0%, ${preset.wax} 52%, ${preset.liquid} 52%, ${preset.liquid} 100%)`;
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".swatch-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        applyColors(preset.wax, preset.liquid, preset.name);
+      });
+      swatchesGrid.appendChild(btn);
+    });
+
+    waxColorPicker.addEventListener("input", (e) => {
+      document.querySelectorAll(".swatch-btn").forEach(b => b.classList.remove("active"));
+      applyColors(e.target.value, state.liquidHex, "Custom Dual-Tone");
+    });
+
+    liquidColorPicker.addEventListener("input", (e) => {
+      document.querySelectorAll(".swatch-btn").forEach(b => b.classList.remove("active"));
+      applyColors(state.waxHex, e.target.value, "Custom Dual-Tone");
+    });
+
+    const sliderBrightness = document.getElementById("sliderBrightness");
+    const valBrightness = document.getElementById("valBrightness");
+    sliderBrightness.addEventListener("input", (e) => {
+      state.brightness = parseFloat(e.target.value);
+      valBrightness.textContent = Math.round(state.brightness * 100) + "%";
+    });
+
+    const sliderTemp = document.getElementById("sliderTemp");
+    const valTemp = document.getElementById("valTemp");
+    sliderTemp.addEventListener("input", (e) => {
+      state.temperature = parseFloat(e.target.value);
+      valTemp.textContent = Math.round(state.temperature) + " °C";
+    });
+
+    const sliderViscosity = document.getElementById("sliderViscosity");
+    const valViscosity = document.getElementById("valViscosity");
+    sliderViscosity.addEventListener("input", (e) => {
+      state.viscosity = parseFloat(e.target.value);
+      valViscosity.textContent = state.viscosity.toFixed(2) + " Pa·s";
+    });
+
+    const sliderDensity = document.getElementById("sliderDensity");
+    const valDensity = document.getElementById("valDensity");
+    sliderDensity.addEventListener("input", (e) => {
+      state.density = parseFloat(e.target.value);
+      valDensity.textContent = state.density.toFixed(2) + " g/cm³";
+    });
+
+    const sliderRandomness = document.getElementById("sliderRandomness");
+    const valRandomness = document.getElementById("valRandomness");
+    sliderRandomness.addEventListener("input", (e) => {
+      state.randomness = parseFloat(e.target.value);
+      valRandomness.textContent = Math.round(state.randomness * 100) + "%";
+    });
+
+    const sliderCoalescence = document.getElementById("sliderCoalescence");
+    const valCoalescence = document.getElementById("valCoalescence");
+    sliderCoalescence.addEventListener("input", (e) => {
+      state.coalescence = parseFloat(e.target.value);
+      valCoalescence.textContent = state.coalescence.toFixed(2);
+    });
+
+    // Lifecycle Speed Selector
+    const speedText = document.getElementById("speedText");
+    document.querySelectorAll("#speedGroup .seg-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#speedGroup .seg-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        state.simSpeed = parseFloat(btn.dataset.speed);
+        speedText.textContent = btn.textContent;
+      });
+    });
+
+    // Hide / Show Controls UI
+    const toggleUiBtn = document.getElementById("toggleUiBtn");
+    const toggleUiText = document.getElementById("toggleUiText");
+    function toggleControlsVisibility() {
+      const hidden = document.body.classList.toggle("controls-hidden");
+      toggleUiText.textContent = hidden ? "Show UI" : "Hide UI";
+    }
+    toggleUiBtn.addEventListener("click", toggleControlsVisibility);
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "h" || e.key === "H") {
+        toggleControlsVisibility();
+      }
+    });
+
+    // Immediate Lab Action Buttons
+    document.getElementById("btnCoalesce").addEventListener("click", () => {
+      startFromStillFlatTopPool();
+    });
+
+    document.getElementById("btnErupt").addEventListener("click", () => {
+      triggerSinglePlumeFromPool();
+    });
+
+    document.getElementById("btnMix").addEventListener("click", () => {
+      state.swirlAngularVel = (Math.random() > 0.5 ? 1 : -1) * 3.2;
+      for (let i = 0; i < MAX_BLOBS; i++) {
+        const b = blobs[i];
+        if (b.stage > 0) {
+          const ang = (i / MAX_BLOBS) * Math.PI * 2 + Math.random();
+          b.vx += Math.cos(ang) * 0.45;
+          b.vz += Math.sin(ang) * 0.45;
+        }
+      }
+    });
+
+    document.getElementById("btnSpawn").addEventListener("click", () => {
+      triggerSinglePlumeFromPool();
+    });
+
+    // Performance Quality Selector
+    const resScaleText = document.getElementById("resScaleText");
+    document.querySelectorAll("#perfGroup .seg-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#perfGroup .seg-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        state.renderScale = parseFloat(btn.dataset.scale);
+        state.autoScaleFactor = 1.0;
+        resScaleText.textContent = btn.textContent + " (" + Math.round(state.renderScale * 100) + "%)";
+        updateCanvasSize();
+      });
+    });
+
+    // Bottom Interaction Mode Chips
+    document.querySelectorAll(".bottom-toolbar .tool-chip[data-mode]").forEach(chip => {
+      chip.addEventListener("click", () => {
+        document.querySelectorAll(".bottom-toolbar .tool-chip[data-mode]").forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        state.interactionMode = chip.dataset.mode;
+      });
+    });
+
+    function syncSlidersFromState() {
+      sliderTemp.value = state.temperature;
+      valTemp.textContent = Math.round(state.temperature) + " °C";
+      sliderViscosity.value = state.viscosity;
+      valViscosity.textContent = state.viscosity.toFixed(2) + " Pa·s";
+      sliderDensity.value = state.density;
+      valDensity.textContent = state.density.toFixed(2) + " g/cm³";
+      sliderRandomness.value = state.randomness;
+      valRandomness.textContent = Math.round(state.randomness * 100) + "%";
+      sliderCoalescence.value = state.coalescence;
+      valCoalescence.textContent = state.coalescence.toFixed(2);
+    }
+
+    document.getElementById("btnQuickPreset1").addEventListener("click", () => {
+      state.temperature = 86;
+      state.viscosity = 0.22;
+      state.density = 0.95;
+      state.randomness = 0.90;
+      state.coalescence = 0.62;
+      syncSlidersFromState();
+      triggerSinglePlumeFromPool();
+    });
+
+    document.getElementById("btnQuickPreset2").addEventListener("click", () => {
+      state.temperature = 70;
+      state.viscosity = 0.72;
+      state.density = 0.98;
+      state.randomness = 0.75;
+      state.coalescence = 0.78;
+      syncSlidersFromState();
+    });
+
+    document.getElementById("btnQuickPreset3").addEventListener("click", () => {
+      state.temperature = 25;
+      state.viscosity = 0.45;
+      state.density = 1.06;
+      state.coalescence = 0.72;
+      syncSlidersFromState();
+      for (let i = 0; i < MAX_BLOBS; i++) {
+        if (blobs[i].stage > 0) {
+          blobs[i].temp = 0.18;
+          blobs[i].stage = 3;
+        }
+      }
+    });
+
+    // =========================================================================
+    // 7. DIRECT 3D CANVAS POINTER & WHEEL INTERACTION
+    // =========================================================================
+    function screenToLampWorld(clientX, clientY, camInfo) {
+      const nx = (clientX / window.innerWidth) * 2.0 - 1.0;
+      const ny = 1.0 - (clientY / window.innerHeight) * 2.0;
+      const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+      const scale = state.camDist * 0.52;
+      const wx = camInfo.right[0] * nx * aspect * scale + camInfo.up[0] * ny * scale;
+      const wy = camInfo.right[1] * nx * aspect * scale + camInfo.up[1] * ny * scale - 0.10;
+      const wz = camInfo.right[2] * nx * aspect * scale + camInfo.up[2] * ny * scale;
+      return [wx, wy, wz];
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+      state.pointerDown = true;
+      state.pointerX = e.clientX;
+      state.pointerY = e.clientY;
+      const camInfo = computeCamera(state.camYaw, state.camPitch, state.camDist);
+      state.pointerWorld = screenToLampWorld(e.clientX, e.clientY, camInfo);
+      state.pointerVelWorld = [0, 0, 0];
+    });
+
+    window.addEventListener("pointermove", (e) => {
+      if (!state.pointerDown) return;
+      const dx = e.clientX - state.pointerX;
+      const dy = e.clientY - state.pointerY;
+      state.pointerX = e.clientX;
+      state.pointerY = e.clientY;
+
+      const camInfo = computeCamera(state.camYaw, state.camPitch, state.camDist);
+      const nextWorld = screenToLampWorld(e.clientX, e.clientY, camInfo);
+      const overLamp = Math.hypot(nextWorld[0], nextWorld[2]) < 0.72 && Math.abs(nextWorld[1]) < 1.25;
+
+      if (state.interactionMode === "orbit" || (!overLamp && state.interactionMode === "stir")) {
+        state.camYaw -= dx * 0.0075;
+        state.camPitch = Math.max(-0.55, Math.min(0.65, state.camPitch + dy * 0.0065));
+      } else {
+        state.pointerVelWorld = [
+          (nextWorld[0] - state.pointerWorld[0]) * 18.0,
+          (nextWorld[1] - state.pointerWorld[1]) * 18.0,
+          (nextWorld[2] - state.pointerWorld[2]) * 18.0
+        ];
+        state.swirlAngularVel += dx * 0.015;
+      }
+      state.pointerWorld = nextWorld;
+    });
+
+    window.addEventListener("pointerup", () => {
+      state.pointerDown = false;
+      state.pointerVelWorld = [0, 0, 0];
+    });
+
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      state.camDist = Math.max(2.6, Math.min(5.8, state.camDist + e.deltaY * 0.0018));
+    }, { passive: false });
+
+    // =========================================================================
+    // 8. MAIN RENDER & SIMULATION LOOP
+    // =========================================================================
+    let lastTime = performance.now();
+    let timeNowSec = 0.0;
+    let frameCount = 0;
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      const rawDt = (now - lastTime) * 0.001;
+      const dt = Math.min(0.05, Math.max(0.001, rawDt));
+      lastTime = now;
+      timeNowSec = now * 0.001;
+
+      const instantFps = 1.0 / Math.max(0.001, rawDt);
+      state.fpsSmooth = state.fpsSmooth * 0.90 + instantFps * 0.10;
+      frameCount++;
+
+      stepPhysics(dt, timeNowSec);
+
+      const poolFlatTopY = -1.12 + state.basePoolVolume * 0.82;
+
+      if (frameCount % 12 === 0) {
+        if (state.fpsSmooth < 35 && state.autoScaleFactor > 0.45) {
+          state.autoScaleFactor = Math.max(0.45, state.autoScaleFactor * 0.82);
+          updateCanvasSize();
+        }
+        statFps.textContent = Math.round(state.fpsSmooth) + " FPS";
+      }
+
+      const kInterBlob = 0.09 + 0.17 * state.coalescence;
+      for (let i = 0; i < MAX_BLOBS; i++) {
+        const b = blobs[i];
+        const i4 = i * 4;
+
+        blobPosData[i4]     = b.x;
+        blobPosData[i4 + 1] = b.y;
+        blobPosData[i4 + 2] = b.z;
+        blobPosData[i4 + 3] = b.radius;
+
+        if (b.stage === 0) {
+          blobShapeData[i4]     = 1.0;
+          blobShapeData[i4 + 1] = 1.0;
+          blobShapeData[i4 + 2] = 0.0;
+          blobShapeData[i4 + 3] = 0.0;
+
+          blobModesData[i4]     = b.temp;
+          blobModesData[i4 + 1] = 0.0;
+          blobModesData[i4 + 2] = 0.0;
+          blobModesData[i4 + 3] = 0.0;
+          continue;
+        }
+
+        const varScale = state.randomness * b.shapeAspect;
+
+        let taperDir = 0.0;
+        if (b.stage === 1) taperDir = 0.28 * Math.min(1.2, varScale);
+        else if (b.stage === 2) taperDir = 0.08 * varScale;
+        else if (b.stage === 3) taperDir = -0.26 * Math.min(1.2, varScale);
+
+        const distFromPool = Math.abs(b.y - poolFlatTopY);
+        const poolNeckBoost = (distFromPool < b.radius * 2.1) ? 1.65 : 1.0;
+
+        blobShapeData[i4]     = 1.0 / b.stretchY;
+        blobShapeData[i4 + 1] = Math.sqrt(b.stretchY);
+        blobShapeData[i4 + 2] = taperDir;
+        blobShapeData[i4 + 3] = kInterBlob * poolNeckBoost;
+
+        const tOsc = state.simTimeElapsed * 0.95 + b.seedPhase;
+        const mode2A = 0.18 * varScale * Math.sin(tOsc);
+        const mode2B = 0.16 * varScale * Math.cos(tOsc * 0.85 + 1.1);
+        const mode3C = 0.14 * varScale * Math.sin(tOsc * 1.15 + 2.3);
+
+        blobModesData[i4]     = b.temp;
+        blobModesData[i4 + 1] = mode2A;
+        blobModesData[i4 + 2] = mode2B;
+        blobModesData[i4 + 3] = mode3C;
+      }
+
+      const camInfo = computeCamera(state.camYaw, state.camPitch, state.camDist);
+      const heaterNorm = (state.temperature - 20.0) / 80.0;
+
+      if (gl && prog) {
+        gl.useProgram(prog);
+        gl.uniform2f(uLoc.uResolution, canvas.width, canvas.height);
+        gl.uniform1f(uLoc.uTime, timeNowSec);
+        gl.uniform3fv(uLoc.uCamPos, camInfo.camPos);
+        gl.uniformMatrix3fv(uLoc.uCamMat, false, camInfo.camMat);
+
+        gl.uniform3fv(uLoc.uWaxColor, state.waxColor);
+        gl.uniform3fv(uLoc.uLiquidColor, state.liquidColor);
+        gl.uniform1f(uLoc.uBrightness, state.brightness);
+        gl.uniform1f(uLoc.uRandomness, state.randomness);
+        gl.uniform1f(uLoc.uCoalescence, state.coalescence);
+        gl.uniform1f(uLoc.uPoolTopY, poolFlatTopY);
+        gl.uniform1f(uLoc.uHeaterNorm, heaterNorm);
+
+        gl.uniform4fv(uLoc.uBlobs, blobPosData);
+        gl.uniform4fv(uLoc.uBlobShape, blobShapeData);
+        gl.uniform4fv(uLoc.uBlobModes, blobModesData);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
